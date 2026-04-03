@@ -77,15 +77,33 @@ with c1:
         st.plotly_chart(fig_col, use_container_width=True)
 
 with c2:
-    # Word Cloud από τις κριτικές
     st.info("Word Cloud Κριτικών (Sentiment)")
-    text = " ".join(review for review in rev_filtered['text'].astype(str))
-    wordcloud = WordCloud(width=800, height=400, background_color="white", colormap="viridis").generate(text)
     
-    fig, ax = plt.subplots()
-    ax.imshow(wordcloud, interpolation='bilinear')
-    ax.axis("off")
-    st.pyplot(fig)
+    # 1. Φιλτράρισμα και καθαρισμός των κενών τιμών (NaN)
+    valid_reviews = rev_filtered['text'].dropna().astype(str)
+    
+    if not valid_reviews.empty:
+        # 2. Δημιουργία του κειμένου
+        text = " ".join(review for review in valid_reviews)
+        
+        # 3. Δημιουργία WordCloud
+        try:
+            wordcloud = WordCloud(
+                width=800, 
+                height=400, 
+                background_color="white", 
+                colormap="viridis",
+                # Προσθέστε ελληνικά stopwords αν χρειάζεται για να αφαιρέσετε λέξεις όπως "και", "το" κλπ
+            ).generate(text)
+            
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.imshow(wordcloud, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
+        except Exception as e:
+            st.warning("Δεν ήταν δυνατή η δημιουργία του Word Cloud.")
+    else:
+        st.write("Δεν υπάρχουν διαθέσιμες κριτικές για αυτό το αξιοθέατο.")
 
 # --- Section 3: Ανάλυση Ικανοποίησης ---
 st.subheader("📈 Τάσεις & Ικανοποίηση")
