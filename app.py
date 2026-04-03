@@ -112,14 +112,30 @@ row1_1, row1_2 = st.columns(2)
 
 with row1_1:
     # Φωτογραφίες ανά βαθμολογία
-    fig_photo = px.box(df, x='rating', y='Photocount', title="Αριθμός Φωτογραφιών ανά Βαθμολογία")
+    fig_photo = px.box(df, x='rating', y='Photocount', 
+                       title="Αριθμός Φωτογραφιών ανά Βαθμολογία",
+                       color_discrete_sequence=['#2d4a6b'])
     st.plotly_chart(fig_photo, use_container_width=True)
 
 with row1_2:
     # Μέγεθος κριτικής vs Βαθμολογία
-    df['review_len'] = df['text'].str.len()
-    fig_len = px.scatter(df, x='review_len', y='rating', trendline="ols", title="Μέγεθος Κειμένου vs Βαθμολογία")
-    st.plotly_chart(fig_len, use_container_width=True)
+    df['review_len'] = df['text'].str.len().fillna(0)
+    
+    # Χρήση try-except για την περίπτωση που λείπει το statsmodels ή δεν υπάρχουν αρκετά δεδομένα
+    try:
+        fig_len = px.scatter(df, x='review_len', y='rating', 
+                           trendline="ols", 
+                           title="Μέγεθος Κειμένου vs Βαθμολογία (Regression Analysis)",
+                           labels={'review_len': 'Χαρακτήρες κειμένου', 'rating': 'Βαθμολογία'},
+                           opacity=0.5)
+        st.plotly_chart(fig_len, use_container_width=True)
+    except Exception as e:
+        # Fallback γράφημα χωρίς trendline αν αποτύχει η παλινδρόμηση
+        fig_len_basic = px.scatter(df, x='review_len', y='rating', 
+                                 title="Μέγεθος Κειμένου vs Βαθμολογία",
+                                 opacity=0.5)
+        st.plotly_chart(fig_len_basic, use_container_width=True)
+        st.caption("Σημείωση: Η γραμμή τάσης δεν είναι διαθέσιμη (απαιτείται statsmodels).")
 
 # --- 7. Επίπεδο Εμπλοκής (User Contributions) ---
 st.subheader("🎖️ Προφίλ Εμπειρίας Χρηστών")
