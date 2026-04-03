@@ -51,10 +51,18 @@ try:
 except Exception as e:
     st.error(f"Σφάλμα φόρτωσης: {e}")
     st.stop()
+    
+# Καθαρισμός βασικών στηλών από NaN που προκαλούν σφάλματα στα γραφήματα
+rev['rating'] = pd.to_numeric(rev['rating'], errors='coerce').fillna(0)
+rev['Photocount'] = pd.to_numeric(rev['Photocount'], errors='coerce').fillna(0)
+rev['placeInfo/name'] = rev['placeInfo/name'].fillna("Άγνωστο Αξιοθέατο")
 
 # --- Sidebar Φίλτρα ---
 st.sidebar.header("🎯 Στρατηγική Επιλογή")
-all_places = ["Όλα τα Αξιοθέατα"] + sorted(list(rev['placeInfo/name'].unique()))
+# Αφαιρούμε τα NaN (dropna) και μετατρέπουμε σε string για σιγουριά
+unique_names = rev['placeInfo/name'].dropna().unique()
+all_places = ["Όλα τα Αξιοθέατα"] + sorted([str(name) for name in unique_names])
+
 selected_place = st.sidebar.selectbox("Επιλέξτε Σημείο Ενδιαφέροντος:", all_places)
 
 # Φιλτράρισμα Δεδομένων
