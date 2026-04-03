@@ -6,6 +6,9 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import numpy as np
 
+df['publishedDate'] = pd.to_datetime(df['publishedDate'], errors='coerce')
+df = df.dropna(subset=['publishedDate']) # Αφαιρεί κριτικές χωρίς ημερομηνία
+
 # --- Ρυθμίσεις Σελίδας ---
 st.set_page_config(page_title="Kastoria Tourism Expert Analytics", layout="wide")
 
@@ -162,11 +165,28 @@ with c7:
 
 with c8:
     # Επίπεδα Εμπλοκής Χρηστών
-    bins = [0, 1, 5, 20, 100, 100000]
+    # Διασφαλίζουμε ότι τα contributions είναι αριθμητικά
+    rev['user/contributions/totalContributions'] = pd.to_numeric(rev['user/contributions/totalContributions'], errors='coerce').fillna(0)
+    
+    bins = [0, 1, 5, 20, 100, 1000000]
     labels = ["Newbie (1)", "Explorer (2-5)", "Contributor (6-20)", "Expert (21-100)", "Local Guide (100+)"]
+    
+    # Χρήση του φιλτραρισμένου df
     df['engagement_level'] = pd.cut(df['user/contributions/totalContributions'], bins=bins, labels=labels)
+    
+    # Σωστή προετοιμασία του dataframe για την Plotly
     eng_dist = df['engagement_level'].value_counts().reindex(labels).reset_index()
-    fig_eng = px.pie(eng_dist, values='count', names='index', title="Ποιοι μας κρίνουν; (Επίπεδο Εμπειρίας)")
+    
+    # Ονομάζουμε ρητά τις στήλες για να τις βρει η Plotly Express
+    eng_dist.columns = ['Level', 'Counts'] 
+    
+    fig_eng = px.pie(eng_dist, 
+                     values='Counts', 
+                     names='Level', 
+                     title="Ποιοι μας κρίνουν; (Επίπεδο Εμπειρίας)",
+                     hole=0.4, # Μετατροπή σε Donut chart για πιο modern look
+                     color_discrete_sequence=px.colors.qualitative.Pastel)
+    
     st.plotly_chart(fig_eng, use_container_width=True)
 
 # --- SECTION 5: Συγκριτική Ανάλυση Αξιοθέατων (Μόνο αν είναι επιλεγμένο το 'Όλα') ---
