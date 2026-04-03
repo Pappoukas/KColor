@@ -406,8 +406,10 @@ elif page == "🔮 Cluster Explorer":
                             labels={"x": "Cluster", "y": "Count"})
         st.plotly_chart(fig_counts, use_container_width=True)
 
-        # PCA on color features
-        stats_wide = df_stats.pivot(index="#", columns="Channel", values="Mean").reset_index()
+        # PCA on color features - remove duplicates before pivot
+        df_stats_unique = df_stats.drop_duplicates(subset=["#", "Channel"])
+        stats_wide = df_stats_unique.pivot(index="#", columns="Channel", values="Mean").reset_index()
+        
         feature_cols = ["Red", "Green", "Blue", "Saturation", "Value", "Lightness", "Chroma"]
         available_features = [c for c in feature_cols if c in stats_wide.columns]
         features = stats_wide[["#"] + available_features].dropna()
@@ -459,6 +461,3 @@ elif page == "🔮 Cluster Explorer":
             st.info("No cluster color signatures could be derived.")
     else:
         st.warning("No cluster data available.")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("Built with Streamlit • Color analysis from TripAdvisor photos")
