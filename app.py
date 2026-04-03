@@ -1,4 +1,4 @@
-# app.py (διορθωμένο)
+# app.py (πλήρως διορθωμένο)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -54,42 +54,44 @@ st.markdown(
 )
 
 # ------------------------------------------------------------
-# Data loading with dynamic column detection
+# Data loading with robust handling
 # ------------------------------------------------------------
 @st.cache_data
 def load_summary():
-    df = pd.read_csv("color_summary_batch_Summary.csv", sep=";", decimal=",")
-    # Clean column names: strip leading/trailing spaces
+    df = pd.read_csv("color_summary_batch_Summary.csv", sep=";", encoding="utf-8")
     df.columns = df.columns.str.strip()
     
-    # Rename problematic columns if needed (e.g., "Color 1 %" → "Color 1%")
-    # But better: dynamically detect color columns using regex
+    # Convert all percentage columns (Color X %) to numeric, handling comma decimal
+    for col in df.columns:
+        if re.search(r"Color\s+\d+\s*%", col):
+            # Replace comma with dot, then convert to float
+            df[col] = df[col].astype(str).str.replace(",", ".", regex=False)
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
 
 @st.cache_data
 def get_color_columns(df):
-    """Return list of dicts with hex, pct, name columns for each rank 1-5."""
-    # Find all columns that match pattern "Color X HEX", "Color X %", "Color X Name"
-    # using flexible spacing
+    """Return list of dicts with hex, pct, name columns for ranks 1-5."""
     hex_cols = {}
     pct_cols = {}
     name_cols = {}
     for col in df.columns:
-        # Match "Color" followed by a number, then optional space, then "HEX"
+        # Match "Color" followed by a number, optional spaces, then "HEX"
         match_hex = re.match(r"Color\s*(\d+)\s*HEX", col, re.IGNORECASE)
         if match_hex:
             rank = int(match_hex.group(1))
             hex_cols[rank] = col
+        # Match "Color" + number + optional spaces + "%"
         match_pct = re.match(r"Color\s*(\d+)\s*%", col, re.IGNORECASE)
         if match_pct:
             rank = int(match_pct.group(1))
             pct_cols[rank] = col
+        # Match "Color" + number + optional spaces + "Name"
         match_name = re.match(r"Color\s*(\d+)\s*Name", col, re.IGNORECASE)
         if match_name:
             rank = int(match_name.group(1))
             name_cols[rank] = col
     
-    # Build list for ranks 1..5
     color_cols = []
     for rank in range(1, 6):
         if rank in hex_cols and rank in pct_cols and rank in name_cols:
@@ -103,8 +105,11 @@ def get_color_columns(df):
 
 @st.cache_data
 def load_clusters():
-    df = pd.read_csv("color_summary_batch_Clusters.csv", sep=";", decimal=",")
+    df = pd.read_csv("color_summary_batch_Clusters.csv", sep=";", encoding="utf-8")
     df.columns = df.columns.str.strip()
+    # Convert percentage column
+    if "%" in df.columns:
+        df["%"] = df["%"].astype(str).str.replace(",", ".").astype(float)
     numeric_cols = ["Pixels", "%", "Red", "Green", "Blue", "Hue", "Saturation", "Value", "Lightness", "Green-Red", "Blue-Yellow"]
     for col in numeric_cols:
         if col in df.columns:
@@ -113,7 +118,7 @@ def load_clusters():
 
 @st.cache_data
 def load_info():
-    df = pd.read_csv("color_summary_batch_Info.csv", sep=";", decimal=",")
+    df = pd.read_csv("color_summary_batch_Info.csv", sep=";", encoding="utf-8")
     df.columns = df.columns.str.strip()
     if "placeInfo/name" in df.columns:
         df["placeInfo/name"] = df["placeInfo/name"].astype(str).str.strip()
@@ -121,23 +126,24 @@ def load_info():
 
 @st.cache_data
 def load_statistics():
-    df = pd.read_csv("color_summary_batch_Statistics.csv", sep=";", decimal=",")
+    df = pd.read_csv("color_summary_batch_Statistics.csv", sep=";", encoding="utf-8")
     df.columns = df.columns.str.strip()
     for col in df.columns:
         if col not in ["#", "Space", "Channel"]:
+            df[col] = df[col].astype(str).str.replace(",", ".", regex=False)
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
 
-# Load all dataframes
+# Load data
 df_summary = load_summary()
 df_clusters = load_clusters()
 df_info = load_info()
 df_stats = load_statistics()
 
-# Get dynamic color columns
+# Detect color columns
 color_columns = get_color_columns(df_summary)
 
-# Build long format for top 5 colors per image
+# Build long format for top 5 colors
 records = []
 for _, row in df_summary.iterrows():
     image_id = row["#"]
@@ -153,24 +159,36 @@ for _, row in df_summary.iterrows():
                 "percentage": pct_val,
                 "color_name": name_val
             })
+
 df_colors_long = pd.DataFrame(records)
+
+# Ensure percentage is numeric (already, but double-check)
+df_colors_long["percentage"] = pd.to_numeric(df_colors_long["percentage"], errors="coerce")
+df_colors_long = df_colors_long.dropna(subset=["percentage"])
 
 # Merge monument info
 df_colors_long = df_colors_long.merge(df_info[["#", "placeInfo/name"]], on="#", how="left")
 
 # Overall color frequency
-overall_color_freq = df_colors_long.groupby("hex").agg(
-    total_percentage=("percentage", "sum"),
-    color_name=("color_name", "first")
-).reset_index().sort_values("total_percentage", ascending=False)
+if not df_colors_long.empty:
+    overall_color_freq = df_colors_long.groupby("hex").agg(
+        total_percentage=("percentage", "sum"),
+        color_name=("color_name", "first")
+    ).reset_index().sort_values("total_percentage", ascending=False)
+else:
+    overall_color_freq = pd.DataFrame(columns=["hex", "total_percentage", "color_name"])
 
 # Per-monument color frequency
-monument_color_freq = df_colors_long.groupby(["placeInfo/name", "hex"]).agg(
-    total_percentage=("percentage", "sum"),
-    color_name=("color_name", "first")
-).reset_index()
+if not df_colors_long.empty:
+    monument_color_freq = df_colors_long.groupby(["placeInfo/name", "hex"]).agg(
+        total_percentage=("percentage", "sum"),
+        color_name=("color_name", "first")
+    ).reset_index()
+else:
+    monument_color_freq = pd.DataFrame(columns=["placeInfo/name", "hex", "total_percentage", "color_name"])
 
-# Dominant cluster for each image (highest % cluster)
+# Dominant cluster per image (highest %)
+df_clusters["%"] = pd.to_numeric(df_clusters["%"], errors="coerce")
 df_clusters_dominant = df_clusters.loc[df_clusters.groupby("#")["%"].idxmax()]
 df_clusters_dominant = df_clusters_dominant[["#", "Cluster"]].rename(columns={"Cluster": "dominant_cluster"})
 
@@ -207,7 +225,7 @@ if page == "🏠 Overview":
         unique_monuments = df_info["placeInfo/name"].nunique()
         st.metric("Monuments / Attractions", unique_monuments)
     with col3:
-        unique_colors = df_colors_long["hex"].nunique()
+        unique_colors = df_colors_long["hex"].nunique() if not df_colors_long.empty else 0
         st.metric("Unique Colors (Top-5)", unique_colors)
     with col4:
         avg_saturation = df_stats[df_stats["Channel"] == "Saturation"]["Mean"].values[0] if not df_stats[df_stats["Channel"] == "Saturation"].empty else 0
@@ -217,13 +235,16 @@ if page == "🏠 Overview":
     col_a, col_b = st.columns(2)
     with col_a:
         st.markdown("### 🎯 Most Frequent Colors (Overall)")
-        top10 = overall_color_freq.head(10)
-        fig = px.bar(top10, x="total_percentage", y="hex", orientation='h',
-                     color="total_percentage", color_continuous_scale="Viridis",
-                     title="Top 10 Colors by Aggregated Area %",
-                     labels={"total_percentage": "Total % across images", "hex": "Color (HEX)"})
-        fig.update_layout(height=500, margin=dict(l=0, r=0, t=40, b=0))
-        st.plotly_chart(fig, use_container_width=True)
+        if not overall_color_freq.empty:
+            top10 = overall_color_freq.head(10)
+            fig = px.bar(top10, x="total_percentage", y="hex", orientation='h',
+                         color="total_percentage", color_continuous_scale="Viridis",
+                         title="Top 10 Colors by Aggregated Area %",
+                         labels={"total_percentage": "Total % across images", "hex": "Color (HEX)"})
+            fig.update_layout(height=500, margin=dict(l=0, r=0, t=40, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No color data available.")
     with col_b:
         st.markdown("### 🏛️ Monuments Overview")
         monument_counts = df_info["placeInfo/name"].value_counts().reset_index()
@@ -235,11 +256,12 @@ if page == "🏠 Overview":
 
     st.markdown("---")
     st.markdown("### 🌈 Color Diversity Snapshot")
-    top12 = overall_color_freq.head(12)
-    color_swatches = []
-    for _, row in top12.iterrows():
-        color_swatches.append(f"<div style='background-color:{row['hex']}; width:60px; height:60px; border-radius:8px; margin:4px; display:inline-block;'></div>")
-    st.markdown("".join(color_swatches), unsafe_allow_html=True)
+    if not overall_color_freq.empty:
+        top12 = overall_color_freq.head(12)
+        color_swatches = []
+        for _, row in top12.iterrows():
+            color_swatches.append(f"<div style='background-color:{row['hex']}; width:60px; height:60px; border-radius:8px; margin:4px; display:inline-block;'></div>")
+        st.markdown("".join(color_swatches), unsafe_allow_html=True)
 
 # ------------------------------------------------------------
 # Page: Color Frequency Bar Chart
@@ -249,14 +271,17 @@ elif page == "📊 Color Frequency":
     freq_option = st.radio("Select scope", ["Overall Top 10 Colors", "Top 5 per Monument"], horizontal=True)
 
     if freq_option == "Overall Top 10 Colors":
-        top_n = st.slider("Number of top colors to show", 5, 20, 10)
-        data = overall_color_freq.head(top_n).copy()
-        fig = px.bar(data, x="total_percentage", y="hex", orientation='h',
-                     color="total_percentage", color_continuous_scale="Plasma",
-                     title=f"Top {top_n} Colors (Aggregated % across all images)",
-                     labels={"total_percentage": "Total percentage", "hex": "Color"})
-        fig.update_layout(height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        if not overall_color_freq.empty:
+            top_n = st.slider("Number of top colors to show", 5, 20, 10)
+            data = overall_color_freq.head(top_n).copy()
+            fig = px.bar(data, x="total_percentage", y="hex", orientation='h',
+                         color="total_percentage", color_continuous_scale="Plasma",
+                         title=f"Top {top_n} Colors (Aggregated % across all images)",
+                         labels={"total_percentage": "Total percentage", "hex": "Color"})
+            fig.update_layout(height=500)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No color frequency data available.")
 
     else:  # per monument
         monuments = sorted(df_info["placeInfo/name"].unique())
@@ -270,16 +295,15 @@ elif page == "📊 Color Frequency":
                          labels={"total_percentage": "Aggregated %", "hex": "Color"})
             fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("#### 🎨 Color Palette")
+            cols = st.columns(5)
+            for idx, (_, row) in enumerate(top5.iterrows()):
+                with cols[idx]:
+                    st.markdown(f"<div style='background-color:{row['hex']}; height:80px; border-radius:12px;'></div>", unsafe_allow_html=True)
+                    st.caption(f"{row['hex']}<br>{row['total_percentage']:.1f}%", unsafe_allow_html=True)
         else:
             st.warning("No color data found for this monument.")
-
-    if freq_option == "Top 5 per Monument" and "selected_monument" in locals() and not top5.empty:
-        st.markdown("#### 🎨 Color Palette")
-        cols = st.columns(5)
-        for idx, (_, row) in enumerate(top5.iterrows()):
-            with cols[idx]:
-                st.markdown(f"<div style='background-color:{row['hex']}; height:80px; border-radius:12px;'></div>", unsafe_allow_html=True)
-                st.caption(f"{row['hex']}<br>{row['total_percentage']:.1f}%", unsafe_allow_html=True)
 
 # ------------------------------------------------------------
 # Page: Dominant Colors Pie Chart
@@ -318,24 +342,32 @@ elif page == "🥧 Dominant Colors (Pie)":
 elif page == "🔥 Intensity Heatmap":
     st.markdown('<div class="main-header">Color Intensity Matrix: Images vs Metrics</div>', unsafe_allow_html=True)
     stats_pivot = df_stats[df_stats["Channel"].isin(["Saturation", "Value", "Lightness", "Chroma"])]
-    heatmap_data = stats_pivot.pivot(index="#", columns="Channel", values="Mean").reset_index()
-    heatmap_data = heatmap_data.merge(df_info[["#", "placeInfo/name"]], on="#", how="left")
-    metrics = ["Saturation", "Value", "Lightness", "Chroma"]
-    for m in metrics:
-        if m in heatmap_data.columns:
-            heatmap_data[f"{m}_norm"] = (heatmap_data[m] - heatmap_data[m].min()) / (heatmap_data[m].max() - heatmap_data[m].min())
-    norm_cols = [f"{m}_norm" for m in metrics if f"{m}_norm" in heatmap_data.columns]
-    if norm_cols:
-        heatmap_display = heatmap_data.set_index("#")[norm_cols]
-        heatmap_display.columns = [c.replace("_norm", "") for c in norm_cols]
-        fig = px.imshow(heatmap_display.T, aspect="auto", text_auto=True, color_continuous_scale="Blues",
-                        title="Color Intensity per Image (normalized per metric)",
-                        labels={"x": "Image ID", "y": "Metric", "color": "Normalized Intensity"})
-        fig.update_layout(height=500, xaxis_tickangle=-45)
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption("Higher normalized values indicate stronger intensity (e.g., high saturation, high chroma). Each metric is scaled independently.")
+    if not stats_pivot.empty:
+        heatmap_data = stats_pivot.pivot(index="#", columns="Channel", values="Mean").reset_index()
+        heatmap_data = heatmap_data.merge(df_info[["#", "placeInfo/name"]], on="#", how="left")
+        metrics = ["Saturation", "Value", "Lightness", "Chroma"]
+        for m in metrics:
+            if m in heatmap_data.columns:
+                min_val = heatmap_data[m].min()
+                max_val = heatmap_data[m].max()
+                if max_val > min_val:
+                    heatmap_data[f"{m}_norm"] = (heatmap_data[m] - min_val) / (max_val - min_val)
+                else:
+                    heatmap_data[f"{m}_norm"] = 0
+        norm_cols = [f"{m}_norm" for m in metrics if f"{m}_norm" in heatmap_data.columns]
+        if norm_cols:
+            heatmap_display = heatmap_data.set_index("#")[norm_cols]
+            heatmap_display.columns = [c.replace("_norm", "") for c in norm_cols]
+            fig = px.imshow(heatmap_display.T, aspect="auto", text_auto=True, color_continuous_scale="Blues",
+                            title="Color Intensity per Image (normalized per metric)",
+                            labels={"x": "Image ID", "y": "Metric", "color": "Normalized Intensity"})
+            fig.update_layout(height=500, xaxis_tickangle=-45)
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("Higher normalized values indicate stronger intensity (e.g., high saturation, high chroma). Each metric is scaled independently.")
+        else:
+            st.warning("Required metrics not found in data.")
     else:
-        st.warning("Required metrics not found in data.")
+        st.warning("No intensity data available.")
 
 # ------------------------------------------------------------
 # Page: Scatter plot brightness vs saturation
@@ -344,18 +376,21 @@ elif page == "📈 Brightness vs Saturation":
     st.markdown('<div class="main-header">Brightness vs Saturation</div>', unsafe_allow_html=True)
     sat_df = df_stats[df_stats["Channel"] == "Saturation"][["#", "Mean"]].rename(columns={"Mean": "Saturation_mean"})
     val_df = df_stats[df_stats["Channel"] == "Value"][["#", "Mean"]].rename(columns={"Mean": "Value_mean"})
-    scatter_data = sat_df.merge(val_df, on="#", how="inner")
-    scatter_data = scatter_data.merge(df_info[["#", "placeInfo/name"]], on="#", how="left")
-    scatter_data = scatter_data.merge(df_clusters_dominant, on="#", how="left")
+    if not sat_df.empty and not val_df.empty:
+        scatter_data = sat_df.merge(val_df, on="#", how="inner")
+        scatter_data = scatter_data.merge(df_info[["#", "placeInfo/name"]], on="#", how="left")
+        scatter_data = scatter_data.merge(df_clusters_dominant, on="#", how="left")
 
-    fig = px.scatter(scatter_data, x="Saturation_mean", y="Value_mean", color="placeInfo/name",
-                     hover_data=["#", "dominant_cluster"], size_max=15,
-                     title="Per‑Image Average Saturation vs Brightness (Value)",
-                     labels={"Saturation_mean": "Average Saturation (%)", "Value_mean": "Average Brightness (Value %)"},
-                     trendline="ols")
-    fig.update_layout(legend_title_text="Monument")
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption("Points near the top‑right are vivid and bright; bottom‑left indicates dark and muted images. Trendline shows general correlation.")
+        fig = px.scatter(scatter_data, x="Saturation_mean", y="Value_mean", color="placeInfo/name",
+                         hover_data=["#", "dominant_cluster"], size_max=15,
+                         title="Per‑Image Average Saturation vs Brightness (Value)",
+                         labels={"Saturation_mean": "Average Saturation (%)", "Value_mean": "Average Brightness (Value %)"},
+                         trendline="ols")
+        fig.update_layout(legend_title_text="Monument")
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption("Points near the top‑right are vivid and bright; bottom‑left indicates dark and muted images. Trendline shows general correlation.")
+    else:
+        st.warning("Insufficient data for brightness vs saturation plot.")
 
 # ------------------------------------------------------------
 # Page: Cluster Visualization
@@ -364,59 +399,66 @@ elif page == "🔮 Cluster Explorer":
     st.markdown('<div class="main-header">Color Profile Clusters</div>', unsafe_allow_html=True)
     st.markdown("Images grouped by dominant color profile using K‑means clustering (pre‑computed).")
 
-    cluster_counts = df_clusters_dominant["dominant_cluster"].value_counts().sort_index()
-    fig_counts = px.bar(x=cluster_counts.index, y=cluster_counts.values, color=cluster_counts.index.astype(str),
-                        title="Number of Images per Dominant Cluster",
-                        labels={"x": "Cluster", "y": "Count"})
-    st.plotly_chart(fig_counts, use_container_width=True)
+    if not df_clusters_dominant.empty:
+        cluster_counts = df_clusters_dominant["dominant_cluster"].value_counts().sort_index()
+        fig_counts = px.bar(x=cluster_counts.index, y=cluster_counts.values, color=cluster_counts.index.astype(str),
+                            title="Number of Images per Dominant Cluster",
+                            labels={"x": "Cluster", "y": "Count"})
+        st.plotly_chart(fig_counts, use_container_width=True)
 
-    # PCA on color features
-    stats_wide = df_stats.pivot(index="#", columns="Channel", values="Mean").reset_index()
-    feature_cols = ["Red", "Green", "Blue", "Saturation", "Value", "Lightness", "Chroma"]
-    available_features = [c for c in feature_cols if c in stats_wide.columns]
-    features = stats_wide[["#"] + available_features].dropna()
-    features = features.merge(df_clusters_dominant, on="#", how="inner")
-    features = features.merge(df_info[["#", "placeInfo/name"]], on="#", how="left")
+        # PCA on color features
+        stats_wide = df_stats.pivot(index="#", columns="Channel", values="Mean").reset_index()
+        feature_cols = ["Red", "Green", "Blue", "Saturation", "Value", "Lightness", "Chroma"]
+        available_features = [c for c in feature_cols if c in stats_wide.columns]
+        features = stats_wide[["#"] + available_features].dropna()
+        features = features.merge(df_clusters_dominant, on="#", how="inner")
+        features = features.merge(df_info[["#", "placeInfo/name"]], on="#", how="left")
 
-    if len(features) > 1:
-        X = features[available_features]
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-        pca = PCA(n_components=2)
-        pca_result = pca.fit_transform(X_scaled)
-        features["PC1"] = pca_result[:, 0]
-        features["PC2"] = pca_result[:, 1]
+        if len(features) > 1:
+            X = features[available_features]
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            pca = PCA(n_components=2)
+            pca_result = pca.fit_transform(X_scaled)
+            features["PC1"] = pca_result[:, 0]
+            features["PC2"] = pca_result[:, 1]
 
-        fig_pca = px.scatter(features, x="PC1", y="PC2", color="dominant_cluster",
-                             hover_data=["#", "placeInfo/name"],
-                             title="2D PCA Projection of Color Features (colored by dominant cluster)",
-                             color_continuous_scale="Turbo")
-        fig_pca.update_layout(legend_title_text="Cluster")
-        st.plotly_chart(fig_pca, use_container_width=True)
+            fig_pca = px.scatter(features, x="PC1", y="PC2", color="dominant_cluster",
+                                 hover_data=["#", "placeInfo/name"],
+                                 title="2D PCA Projection of Color Features (colored by dominant cluster)",
+                                 color_continuous_scale="Turbo")
+            fig_pca.update_layout(legend_title_text="Cluster")
+            st.plotly_chart(fig_pca, use_container_width=True)
+        else:
+            st.info("Not enough data for PCA (need at least 2 images with complete features).")
+
+        st.markdown("### 🎨 Cluster Color Signatures")
+        cluster_colors = []
+        for cluster_id in sorted(features["dominant_cluster"].unique()):
+            images_in_cluster = features[features["dominant_cluster"] == cluster_id]["#"].tolist()
+            top_colors_in_cluster = df_colors_long[df_colors_long["#"].isin(images_in_cluster)]
+            if not top_colors_in_cluster.empty:
+                cluster_top = top_colors_in_cluster.groupby("hex").agg(total_pct=("percentage", "sum")).reset_index()
+                cluster_top = cluster_top.sort_values("total_pct", ascending=False).head(4)
+                cluster_colors.append({
+                    "cluster": cluster_id,
+                    "colors": cluster_top["hex"].tolist(),
+                    "count": len(images_in_cluster)
+                })
+
+        if cluster_colors:
+            cols = st.columns(len(cluster_colors))
+            for idx, cc in enumerate(cluster_colors):
+                with cols[idx]:
+                    st.markdown(f"**Cluster {cc['cluster']}** ({cc['count']} images)")
+                    for c in cc["colors"]:
+                        st.markdown(f"<div style='background-color:{c}; height:30px; border-radius:6px; margin:4px;'></div>", unsafe_allow_html=True)
+                        st.caption(c)
+            st.caption("Above: Most frequent HEX colors among images belonging to each cluster.")
+        else:
+            st.info("No cluster color signatures could be derived.")
     else:
-        st.info("Not enough data for PCA (need at least 2 images with complete features).")
-
-    st.markdown("### 🎨 Cluster Color Signatures")
-    cluster_colors = []
-    for cluster_id in sorted(features["dominant_cluster"].unique()):
-        images_in_cluster = features[features["dominant_cluster"] == cluster_id]["#"].tolist()
-        top_colors_in_cluster = df_colors_long[df_colors_long["#"].isin(images_in_cluster)]
-        cluster_top = top_colors_in_cluster.groupby("hex").agg(total_pct=("percentage", "sum")).reset_index()
-        cluster_top = cluster_top.sort_values("total_pct", ascending=False).head(4)
-        cluster_colors.append({
-            "cluster": cluster_id,
-            "colors": cluster_top["hex"].tolist(),
-            "count": len(images_in_cluster)
-        })
-
-    cols = st.columns(len(cluster_colors))
-    for idx, cc in enumerate(cluster_colors):
-        with cols[idx]:
-            st.markdown(f"**Cluster {cc['cluster']}** ({cc['count']} images)")
-            for c in cc["colors"]:
-                st.markdown(f"<div style='background-color:{c}; height:30px; border-radius:6px; margin:4px;'></div>", unsafe_allow_html=True)
-                st.caption(c)
-    st.caption("Above: Most frequent HEX colors among images belonging to each cluster.")
+        st.warning("No cluster data available.")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("Built with Streamlit • Color analysis from TripAdvisor photos")
