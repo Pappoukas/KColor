@@ -6,4 +6,3 @@ wordcloud
 matplotlib
 statsmodels
 scipy
-openpyxl
