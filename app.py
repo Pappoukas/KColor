@@ -380,17 +380,18 @@ elif page == "📈 Brightness vs Saturation":
         scatter_data = sat_df.merge(val_df, on="#", how="inner")
         scatter_data = scatter_data.merge(df_info[["#", "placeInfo/name"]], on="#", how="left")
         scatter_data = scatter_data.merge(df_clusters_dominant, on="#", how="left")
-
-        fig = px.scatter(scatter_data, x="Saturation_mean", y="Value_mean", color="placeInfo/name",
-                         hover_data=["#", "dominant_cluster"], size_max=15,
-                         title="Per‑Image Average Saturation vs Brightness (Value)",
-                         labels={"Saturation_mean": "Average Saturation (%)", "Value_mean": "Average Brightness (Value %)"},
-                         trendline="ols")
-        fig.update_layout(legend_title_text="Monument")
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption("Points near the top‑right are vivid and bright; bottom‑left indicates dark and muted images. Trendline shows general correlation.")
-    else:
-        st.warning("Insufficient data for brightness vs saturation plot.")
+    
+    fig = px.scatter(scatter_data, x="Saturation_mean", y="Value_mean", color="placeInfo/name",
+                     hover_data=["#", "dominant_cluster"], size_max=15,
+                     title="Per‑Image Average Saturation vs Brightness (Value)",
+                     labels={"Saturation_mean": "Average Saturation (%)", "Value_mean": "Average Brightness (Value %)"},
+                     trendline="ols")
+except ImportError:
+    fig = px.scatter(scatter_data, x="Saturation_mean", y="Value_mean", color="placeInfo/name",
+                     hover_data=["#", "dominant_cluster"], size_max=15,
+                     title="Per‑Image Average Saturation vs Brightness (Value)",
+                     labels={"Saturation_mean": "Average Saturation (%)", "Value_mean": "Average Brightness (Value %)"})
+    st.info("Statsmodels not installed – trendline omitted.")
 
 # ------------------------------------------------------------
 # Page: Cluster Visualization
