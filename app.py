@@ -2,125 +2,129 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import numpy as np
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
 # --- Ρυθμίσεις Σελίδας ---
-st.set_page_config(
-    page_title="Kastoria Tourism Visual Analytics",
-    page_icon="🏛️",
-    layout="wide"
-)
+st.set_page_config(page_title="Kastoria Tourism Expert Analytics", layout="wide")
 
-# --- Συνάρτηση Φόρτωσης Δεδομένων ---
+# --- Φόρτωση Δεδομένων & Stopwords ---
 @st.cache_data
 def load_data():
-    # Φόρτωση βασικών αρχείων με βάση το delimiter ';' που είδαμε στα δείγματα
-    df_reviews = pd.read_csv("TripAdvisor_Kastoria.csv", sep=";")
-    df_places = pd.read_csv("ThingsToDo.csv", sep=";")
-    df_colors = pd.read_csv("color_summary_Summary.csv", sep=";")
-    df_clusters = pd.read_csv("color_summary_Clusters.csv", sep=";")
+    rev = pd.read_csv("TripAdvisor_Kastoria.csv", sep=";")
+    places = pd.read_csv("ThingsToDo.csv", sep=";")
     
-    # Μετατροπή ημερομηνιών
-    df_reviews['publishedDate'] = pd.to_datetime(df_reviews['publishedDate'], errors='coerce')
+    # Καθαρισμός Ημερομηνιών
+    rev['publishedDate'] = pd.to_datetime(rev['publishedDate'], dayfirst=True, errors='coerce')
+    rev['year'] = rev['publishedDate'].dt.year
+    rev['month'] = rev['publishedDate'].dt.month
     
-    return df_reviews, df_places, df_colors, df_clusters
+    # Φόρτωση Stopwords
+    try:
+        with open("greek_stopwords.txt", "r", encoding="utf-8") as f:
+            stopwords = set(f.read().split(","))
+    except:
+        stopwords = set()
+    
+    return rev, places, stopwords
 
-try:
-    rev, places, colors, clusters = load_data()
-except Exception as e:
-    st.error(f"Σφάλμα κατά τη φόρτωση των αρχείων: {e}")
-    st.stop()
+rev, places, gr_stopwords = load_data()
 
-# --- Sidebar / Φίλτρα ---
-st.sidebar.header("🔍 Φίλτρα Αναζήτησης")
+# --- Sidebar ---
+st.sidebar.header("📊 Στρατηγικά Φίλτρα")
 selected_place = st.sidebar.selectbox("Επιλέξτε Αξιοθέατο:", ["Όλα"] + list(places['placeInfo/name'].unique()))
 
-# Φιλτράρισμα δεδομένων
-if selected_place != "Όλα":
-    rev_filtered = rev[rev['placeInfo/name'] == selected_place]
-    # Εύρεση ID για τα χρώματα
-    place_id = places[places['placeInfo/name'] == selected_place]['placeInfo/id'].values[0]
-    # Σημείωση: Στο color_summary_Summary το '#' αντιστοιχεί στο ID ή index
-else:
-    rev_filtered = rev
+# Φιλτράρισμα
+df = rev if selected_place == "Όλα" else rev[rev['placeInfo/name'] == selected_place]
 
-# --- Κύριο Περιεχόμενο ---
-st.title("🏛️ Kastoria Tourism Visual Analytics")
-st.markdown("Ανάλυση τουριστικής εικόνας μέσω φωτογραφιών και κριτικών TripAdvisor.")
+# --- 1. Κεντρικά KPIs ---
+st.title(f"🏛️ Ανάλυση: {selected_place}")
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Συνολικές Κριτικές", len(df))
+c2.metric("Μέση Βαθμολογία", round(df['rating'].mean(), 2))
+c3.metric("Helpful Votes", int(df['user/contributions/helpfulVotes'].sum()))
+# Response Rate (Απαντήσεις Διαχειριστών)
+resp_rate = (df['ownerResponse/text'].notna().sum() / len(df)) * 100
+c4.metric("Admin Response %", f"{resp_rate:.1f}%")
 
-# --- Section 1: Στατιστικά Κριτικών (KPIs) ---
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("Συνολικές Κριτικές", len(rev_filtered))
-with col2:
-    st.metric("Μέση Βαθμολογία", round(rev_filtered['rating'].mean(), 2))
-with col3:
-    st.metric("Αξιοθέατα", len(places))
-with col4:
-    st.metric("Φωτογραφίες που Αναλύθηκαν", "1.604")
+# --- 2. Χρονική Ανάλυση & Heatmaps ---
+st.subheader("📈 Χρονική Εξέλιξη & Εποχικότητα")
+tab1, tab2 = st.tabs(["Επισκέψεις & Τάσεις", "Heatmap (Έτος x Μήνας)"])
 
-# --- Section 2: Χρωματική Ταυτότητα (Από README) ---
-st.subheader("🎨 Οπτική Ταυτότητα & Χρωματική Ανάλυση")
-c1, c2 = st.columns([1, 1])
+with tab1:
+    # Επισκέψεις ανά έτος/μήνα
+    trend_data = df.groupby(['year', 'month']).size().reset_index(name='counts')
+    fig_trend = px.line(trend_data, x='month', y='counts', color='year', title="Επισκέψεις ανά Μήνα και Έτος")
+    st.plotly_chart(fig_trend, use_container_width=True)
 
-with c1:
-    st.info("Κυρίαρχα χρώματα στις φωτογραφίες των επισκεπτών")
-    # Παράδειγμα πίτας από το color_summary_Summary
-    if selected_place == "Όλα":
-        top_colors = colors['Color_1_Name'].value_counts().head(10)
-        fig_col = px.pie(values=top_colors.values, names=top_colors.index, 
-                         title="Συχνότητα Χρωμάτων (Top 10)",
-                         color_discrete_sequence=px.colors.qualitative.Pastel)
-        st.plotly_chart(fig_col, use_container_width=True)
+with tab2:
+    # Heatmap
+    heat_data = df.pivot_table(index='year', columns='month', values='rating', aggfunc='count').fillna(0)
+    fig_heat = px.imshow(heat_data, labels=dict(x="Μήνας", y="Έτος", color="Κριτικές"), title="Heatmap Πυκνότητας Κριτικών")
+    st.plotly_chart(fig_heat, use_container_width=True)
 
-with c2:
-    st.info("Word Cloud Κριτικών (Sentiment)")
-    
-    # 1. Φιλτράρισμα και καθαρισμός των κενών τιμών (NaN)
-    valid_reviews = rev_filtered['text'].dropna().astype(str)
-    
-    if not valid_reviews.empty:
-        # 2. Δημιουργία του κειμένου
-        text = " ".join(review for review in valid_reviews)
-        
-        # 3. Δημιουργία WordCloud
-        try:
-            wordcloud = WordCloud(
-                width=800, 
-                height=400, 
-                background_color="white", 
-                colormap="viridis",
-                # Προσθέστε ελληνικά stopwords αν χρειάζεται για να αφαιρέσετε λέξεις όπως "και", "το" κλπ
-            ).generate(text)
-            
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.imshow(wordcloud, interpolation='bilinear')
-            ax.axis("off")
-            st.pyplot(fig)
-        except Exception as e:
-            st.warning("Δεν ήταν δυνατή η δημιουργία του Word Cloud.")
-    else:
-        st.write("Δεν υπάρχουν διαθέσιμες κριτικές για αυτό το αξιοθέατο.")
+# --- 3. Ανάλυση Βαθμολογιών ---
+st.subheader("⭐ Ποιοτική Ανάλυση Βαθμολογίας")
+col_a, col_b = st.columns(2)
+with col_a:
+    fig_dist = px.histogram(df, x='rating', nbins=5, title="Κατανομή Βαθμολογιών (1-5)")
+    st.plotly_chart(fig_dist, use_container_width=True)
+with col_b:
+    # Διαχρονική τάση μέσης βαθμολογίας
+    rating_trend = df.groupby('year')['rating'].mean().reset_index()
+    fig_rt = px.area(rating_trend, x='year', y='rating', title="Διαχρονική Τάση Μέσης Βαθμολογίας")
+    st.plotly_chart(fig_rt, use_container_width=True)
 
-# --- Section 3: Ανάλυση Ικανοποίησης ---
-st.subheader("📈 Τάσεις & Ικανοποίηση")
-# Γράφημα βαθμολογιών ανά τύπο ταξιδιού
-if 'tripType' in rev_filtered.columns:
-    fig_trip = px.box(rev_filtered, x='tripType', y='rating', color='tripType',
-                      title="Βαθμολογία ανά Τύπο Ταξιδιού")
+# --- 4. Γλωσσική & Γεωγραφική Προέλευση ---
+st.subheader("🌍 Γλώσσες & Προέλευση Επισκεπτών")
+c_lang, c_city = st.columns(2)
+
+with c_lang:
+    lang_dist = df['lang'].value_counts().reset_index()
+    fig_lang = px.pie(lang_dist, values='count', names='lang', title="Κατανομή Γλωσσών")
+    st.plotly_chart(fig_lang, use_container_width=True)
+
+with c_city:
+    # Top 20 Πόλεις
+    top_cities = df['user/userLocation/name'].value_counts().head(20).reset_index()
+    fig_city = px.bar(top_cities, x='count', y='user/userLocation/name', orientation='h', title="Top 20 Πόλεις Προέλευσης")
+    st.plotly_chart(fig_city, use_container_width=True)
+
+# --- 5. Τύπος Ταξιδιού & Συναίσθημα ---
+st.subheader("👥 Προφίλ Επισκέπτη")
+t1, t2 = st.columns(2)
+with t1:
+    fig_trip = px.sunburst(df.dropna(subset=['tripType']), path=['tripType', 'rating'], title="Τύπος Ταξιδιού & Ικανοποίηση")
     st.plotly_chart(fig_trip, use_container_width=True)
+with t2:
+    # Word Cloud με Stopwords
+    valid_text = " ".join(df['text'].dropna().astype(str))
+    if valid_text:
+        wc = WordCloud(width=800, height=400, background_color="white", stopwords=gr_stopwords).generate(valid_text)
+        fig_wc, ax = plt.subplots()
+        ax.imshow(wc)
+        ax.axis("off")
+        st.pyplot(fig_wc)
 
-# --- Section 4: Γεωγραφική Κατανομή ---
-st.subheader("📍 Τοποθεσία Αξιοθέατων")
-if 'placeInfo/latitude' in places.columns:
-    map_data = places[['placeInfo/latitude', 'placeInfo/longitude', 'placeInfo/name']].dropna()
-    # Διόρθωση αν οι συντεταγμένες έχουν κόμμα αντί για τελεία
-    map_data['lat'] = map_data['placeInfo/latitude'].astype(str).str.replace(',','.').astype(float)
-    map_data['lon'] = map_data['placeInfo/longitude'].astype(str).str.replace(',','.').astype(float)
-    st.map(map_data[['lat', 'lon']])
+# --- 6. Αλληλεπίδραση & Δραστηριότητα ---
+st.subheader("📱 Ψηφιακό Αποτύπωμα & Δραστηριότητα")
+row1_1, row1_2 = st.columns(2)
 
-st.markdown("---")
-st.caption("Data Source: TripAdvisor & Photo Color Analysis | Kastoria Tourism Dashboard")
+with row1_1:
+    # Φωτογραφίες ανά βαθμολογία
+    fig_photo = px.box(df, x='rating', y='Photocount', title="Αριθμός Φωτογραφιών ανά Βαθμολογία")
+    st.plotly_chart(fig_photo, use_container_width=True)
+
+with row1_2:
+    # Μέγεθος κριτικής vs Βαθμολογία
+    df['review_len'] = df['text'].str.len()
+    fig_len = px.scatter(df, x='review_len', y='rating', trendline="ols", title="Μέγεθος Κειμένου vs Βαθμολογία")
+    st.plotly_chart(fig_len, use_container_width=True)
+
+# --- 7. Επίπεδο Εμπλοκής (User Contributions) ---
+st.subheader("🎖️ Προφίλ Εμπειρίας Χρηστών")
+bins = [0, 1, 5, 20, 100, 10000]
+labels = ["1 κριτική", "2-5", "6-20", "21-100", "100+"]
+df['engagement'] = pd.cut(df['user/contributions/totalContributions'], bins=bins, labels=labels)
+fig_eng = px.bar(df['engagement'].value_counts().reindex(labels), title="Αριθμός Κριτικών ανά Επίπεδο Εμπειρίας Χρήστη")
+st.plotly_chart(fig_eng, use_container_width=True)
