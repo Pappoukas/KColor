@@ -386,7 +386,7 @@ elif page == "📈 Brightness vs Saturation":
                      title="Per‑Image Average Saturation vs Brightness (Value)",
                      labels={"Saturation_mean": "Average Saturation (%)", "Value_mean": "Average Brightness (Value %)"},
                      trendline="ols")
-except ImportError:
+    except ImportError:
     fig = px.scatter(scatter_data, x="Saturation_mean", y="Value_mean", color="placeInfo/name",
                      hover_data=["#", "dominant_cluster"], size_max=15,
                      title="Per‑Image Average Saturation vs Brightness (Value)",
