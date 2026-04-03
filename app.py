@@ -244,42 +244,74 @@ with tab7:
     st.metric("Κριτικές με απάντηση", has_response)
 
 # ------------------------------
-# Tab 8: Χρωματική Ανάλυση
+# Tab 8: Χρωματική Ανάλυση (διορθωμένο)
 # ------------------------------
 with tab8:
-    st.subheader("🎨 Χρωματικές παλέτες ανά αξιοθέατο (από clusters)")
-    # Χρησιμοποιούμε το color_summary_Clusters για να δείξουμε τα 5 κυρίαρχα χρώματα
-    # Συνδέουμε με το αξιοθέατο μέσω του # -> info -> id κριτικής -> placeInfo/name
-    color_places = df_merged.groupby('placeInfo/name_y').agg({'HEX': lambda x: list(x)[:5], 'Color_%': lambda x: list(x)[:5]}).reset_index()
-    for _, row in color_places.iterrows():
+    st.subheader("🎨 Χρωματικές παλέτες ανά αξιοθέατο (από Summary)")
+    
+    # Συγχώνευση summary με info (μέσω #)
+    df_color_place = df_summary.merge(df_info, on='#', how='inner')
+    # Συγχώνευση με reviews για να πάρουμε το placeInfo/name
+    df_color_place = df_color_place.merge(df_reviews[['id', 'placeInfo/name_y']], on='id', how='inner')
+    
+    # Για κάθε αξιοθέατο, συλλέγουμε όλα τα χρώματα (από Color_1_HEX έως Color_5_HEX) και τα ποσοστά τους
+    color_data = []
+    for _, row in df_color_place.iterrows():
         place = row['placeInfo/name_y']
-        if pd.isna(place): continue
-        hex_colors = row['HEX']
-        if isinstance(hex_colors, list) and len(hex_colors) > 0:
+        if pd.isna(place):
+            continue
+        for i in range(1, 6):
+            hex_col = f'Color_{i}_HEX'
+            pct_col = f'Color_{i}_%'
+            if hex_col in row and pct_col in row and pd.notna(row[hex_col]):
+                color_data.append({
+                    'place': place,
+                    'HEX': row[hex_col],
+                    'pct': row[pct_col]
+                })
+    
+    if color_data:
+        df_colors = pd.DataFrame(color_data)
+        # Για κάθε αξιοθέατο, παίρνουμε τα top 5 χρώματα (βάσει ποσοστού) – μπορεί να υπάρχουν περισσότερα
+        top_colors = df_colors.groupby('place').apply(lambda g: g.nlargest(5, 'pct')).reset_index(drop=True)
+        
+        for place in top_colors['place'].unique():
+            place_colors = top_colors[top_colors['place'] == place]
             st.write(f"**{place}**")
-            cols = st.columns(len(hex_colors))
-            for i, (col, hexc) in enumerate(zip(cols, hex_colors)):
-                col.color_picker(f"Χρώμα {i+1}", value=hexc, disabled=True, key=f"{place}_{i}")
+            cols = st.columns(len(place_colors))
+            for i, (_, row) in enumerate(place_colors.iterrows()):
+                cols[i].color_picker(f"Χρώμα {i+1}", value=row['HEX'], disabled=True, key=f"{place}_{i}_{row['HEX']}")
+    else:
+        st.info("Δεν βρέθηκαν χρωματικά δεδομένα για τα επιλεγμένα αξιοθέατα.")
     
     st.subheader("📊 Διασπορά κορεσμού (S%) και φωτεινότητας (V%)")
+    # Χρησιμοποιούμε τα statistics που ήδη έχουν συγχωνευτεί στο df_merged
     if 'S%_mean' in df_stats.columns and 'V%_mean' in df_stats.columns:
-        stats_merged = df_stats.merge(df_info, on='#').merge(df_reviews, left_on='id', right_on='id', how='inner')
+        # Συγχώνευση stats με info και reviews για να πάρουμε το αξιοθέατο
+        stats_merged = df_stats.merge(df_info, on='#').merge(df_reviews[['id', 'placeInfo/name_y']], on='id', how='inner')
         fig = px.scatter(stats_merged, x='S%_mean', y='V%_mean', color='placeInfo/name_y',
                          title="Κορεσμός vs Φωτεινότητα ανά φωτογραφία")
         st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Δεν υπάρχουν δεδομένα S% ή V%.")
     
     st.subheader("🌈 Διάγραμμα Chroma (LCH)")
     if 'Chroma' in df_stats.columns and 'Lightness' in df_stats.columns:
+        stats_merged = df_stats.merge(df_info, on='#').merge(df_reviews[['id', 'placeInfo/name_y']], on='id', how='inner')
         fig = px.scatter(stats_merged, x='Lightness', y='Chroma', color='placeInfo/name_y',
                          title="Lightness vs Chroma")
         st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Δεν υπάρχουν δεδομένα Chroma ή Lightness.")
     
     st.subheader("🔵🔴 Διάγραμμα a* b* (χώρος Lab)")
     if 'Green-Red' in df_stats.columns and 'Blue-Yellow' in df_stats.columns:
+        stats_merged = df_stats.merge(df_info, on='#').merge(df_reviews[['id', 'placeInfo/name_y']], on='id', how='inner')
         fig = px.scatter(stats_merged, x='Green-Red', y='Blue-Yellow', color='placeInfo/name_y',
                          title="a* (πράσινο-κόκκινο) vs b* (μπλε-κίτρινο)")
         st.plotly_chart(fig, use_container_width=True)
-
+    else:
+        st.warning("Δεν υπάρχουν δεδομένα a* ή b*.")
 # ------------------------------
 # Tab 9: Συγκριτικές
 # ------------------------------
