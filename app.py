@@ -133,8 +133,13 @@ def load_data():
     info = pd.read_csv("color_summary_Info.csv", sep=";", encoding="utf-8-sig")
     info.columns = info.columns.str.strip()
     info = info.rename(columns={"Review/ID": "id"})
-    info["id"] = info["id"].astype(str)
-    rev["id"] = rev["id"].astype(str)
+    # Σωστή μετατροπή id (αφαίρεση .0 που βάζει pandas για float ids)
+    info["id"] = info["id"].astype(str).str.replace(r"\.0$", "", regex=True)
+    rev["id"] = (
+        pd.to_numeric(rev["id"], errors="coerce")
+        .astype("Int64").astype(str)
+        .str.replace("<NA>", "", regex=False)
+    )
 
     if "W×H" in info.columns:
         dims = info["W×H"].astype(str).str.split("×", expand=True)
@@ -198,8 +203,7 @@ all_cats = sorted(rev["Category"].dropna().unique())
 sel_cats = st.sidebar.multiselect("Κατηγορίες", options=all_cats, default=all_cats)
 
 all_langs = sorted(rev["lang"].dropna().unique())
-default_langs = all_langs[:min(8, len(all_langs))]
-sel_langs = st.sidebar.multiselect("Γλώσσες", options=all_langs, default=default_langs)
+sel_langs = st.sidebar.multiselect("Γλώσσες", options=all_langs, default=all_langs)
 
 
 def apply_filters(df):
@@ -473,11 +477,28 @@ with tab3:
 # ════════════════════════════════════════════════
 with tab4:
     st.subheader("☁️ Word Cloud κριτικών")
+    # Φόρτωση stopwords από αρχείο (αν υπάρχει) + built-in
+    import os
+    _builtin_stops = {
+        "και","να","το","τα","τη","τον","την","τις","τους","της","του","με",
+        "στο","στα","στη","στην","στον","από","για","αλλά","αν","ότι","ένα",
+        "ένας","μια","είναι","ήταν","έχει","που","δεν","ως","πολύ","αυτό",
+        "αυτή","αυτά","μου","σου","μας","σας","κάθε","αλλα","θα","οι",
+        "a","an","the","and","or","but","is","are","was","were","be","have",
+        "has","had","do","does","did","will","would","could","should","of",
+        "in","on","at","to","for","with","by","from","this","that","i","you",
+        "he","she","it","we","they","not","so","as","if","all","no","very",
+    }
+    _stops = set(_builtin_stops)
+    if os.path.exists("stopwords.txt"):
+        with open("stopwords.txt", encoding="utf-8") as _f:
+            _stops.update(w.strip() for w in _f if w.strip())
     all_text = " ".join(df["text"].dropna().astype(str).tolist())
     if all_text.strip():
         wc = WordCloud(
             width=1000, height=420, background_color="white",
             max_words=120, colormap="tab20",
+            stopwords=_stops,
         ).generate(all_text)
         fig_wc, ax = plt.subplots(figsize=(12, 5))
         ax.imshow(wc, interpolation="bilinear")
@@ -542,75 +563,90 @@ with tab4:
 # TAB 5 — Γλώσσα & Προέλευση
 # ════════════════════════════════════════════════
 with tab5:
-    top_langs = df["lang"].value_counts().head(10).index.tolist()
+    top5_langs = df["lang"].value_counts().head(5).index.tolist()
+    top10_langs = df["lang"].value_counts().head(10).index.tolist()
 
     col_l, col_r = st.columns(2)
     with col_l:
-        st.subheader("🌐 Κατανομή γλωσσών (top 15)")
-        lc = df["lang"].value_counts().head(15).reset_index()
+        st.subheader("🌐 Top 5 γλώσσες κριτικών")
+        lc = df["lang"].value_counts().head(5).reset_index()
         lc.columns = ["Γλώσσα", "Κριτικές"]
-        fig = px.pie(
-            lc, values="Κριτικές", names="Γλώσσα",
-            title="Γλώσσες κριτικών",
-        )
+        fig = px.pie(lc, values="Κριτικές", names="Γλώσσα",
+                     title="Γλώσσες κριτικών (top 5)")
         st.plotly_chart(fig, use_container_width=True)
 
     with col_r:
-        st.subheader("📍 Top 15 πόλεις επισκεπτών")
-        loc_col = "user/userLocation/name"
-        if loc_col in df.columns:
-            loc = df[loc_col].dropna().value_counts().head(15).reset_index()
-            loc.columns = ["Τοποθεσία", "Κριτικές"]
-            fig = px.bar(
-                loc, x="Κριτικές", y="Τοποθεσία", orientation="h",
-                title="Top 15 τοποθεσίες χρηστών",
-            )
+        st.subheader("📊 Κατανομή όλων των γλωσσών")
+        lc_all = df["lang"].value_counts().reset_index()
+        lc_all.columns = ["Γλώσσα", "Κριτικές"]
+        fig = px.bar(lc_all, x="Γλώσσα", y="Κριτικές",
+                     title="Κριτικές ανά γλώσσα (σύνολο)",
+                     color="Κριτικές", color_continuous_scale="Blues")
+        fig.update_xaxes(tickangle=45)
+        st.plotly_chart(fig, use_container_width=True)
+
+    loc_col = "user/userLocation/name"
+    if loc_col in df.columns:
+        locs = df[loc_col].dropna()
+        # Διαχωρισμός Ελλάδα / εξωτερικό βάσει ", Greece" στο string
+        greece_locs = locs[locs.str.contains(", Greece|, Ελλάδα", case=False, na=False)]
+        intl_locs   = locs[~locs.str.contains(", Greece|, Ελλάδα", case=False, na=False)]
+
+        col_l, col_r = st.columns(2)
+        with col_l:
+            st.subheader("🇬🇷 Top 10 πόλεις — Ελλάδα")
+            gr_top = greece_locs.value_counts().head(10).reset_index()
+            gr_top.columns = ["Πόλη", "Κριτικές"]
+            fig = px.bar(gr_top, x="Κριτικές", y="Πόλη", orientation="h",
+                         title="Top 10 ελληνικές πόλεις",
+                         color="Κριτικές", color_continuous_scale="Greens")
+            fig.update_layout(yaxis={"categoryorder": "total ascending"})
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col_r:
+            st.subheader("🌍 Top 10 πόλεις — Εξωτερικό")
+            intl_top = intl_locs.value_counts().head(10).reset_index()
+            intl_top.columns = ["Πόλη", "Κριτικές"]
+            fig = px.bar(intl_top, x="Κριτικές", y="Πόλη", orientation="h",
+                         title="Top 10 διεθνείς τοποθεσίες",
+                         color="Κριτικές", color_continuous_scale="Oranges")
             fig.update_layout(yaxis={"categoryorder": "total ascending"})
             st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("🔥 Heatmap: αξιοθέατο × γλώσσα (top 10 γλώσσες)")
     cross = pd.crosstab(
-        df[df["lang"].isin(top_langs)]["place_name"],
-        df[df["lang"].isin(top_langs)]["lang"],
+        df[df["lang"].isin(top10_langs)]["place_name"],
+        df[df["lang"].isin(top10_langs)]["lang"],
     )
-    fig = px.imshow(
-        cross, text_auto=True, aspect="auto",
-        color_continuous_scale="Blues",
-        title="Κριτικές: αξιοθέατο × γλώσσα",
-    )
+    fig = px.imshow(cross, text_auto=True, aspect="auto",
+                    color_continuous_scale="Blues",
+                    title="Κριτικές: αξιοθέατο × γλώσσα")
     st.plotly_chart(fig, use_container_width=True)
 
     col_l, col_r = st.columns(2)
     with col_l:
         st.subheader("📈 Εξέλιξη top 5 γλωσσών ανά έτος")
-        top5_langs = df["lang"].value_counts().head(5).index.tolist()
         lang_yr = (
             df[df["lang"].isin(top5_langs)]
-            .groupby(["year", "lang"])
-            .size().reset_index(name="Κριτικές")
+            .groupby(["year", "lang"]).size().reset_index(name="Κριτικές")
         )
-        fig = px.line(
-            lang_yr, x="year", y="Κριτικές", color="lang",
-            markers=True, title="Εξέλιξη γλωσσών ανά έτος",
-        )
+        fig = px.line(lang_yr, x="year", y="Κριτικές", color="lang",
+                      markers=True, title="Εξέλιξη γλωσσών ανά έτος")
         st.plotly_chart(fig, use_container_width=True)
 
     with col_r:
         st.subheader("⭐ Βαθμολογία ανά γλώσσα (top 10)")
         lr = (
-            df[df["lang"].isin(top_langs)]
+            df[df["lang"].isin(top10_langs)]
             .groupby("lang")["rating"]
-            .agg(mean="mean", count="count")
-            .reset_index()
+            .agg(mean="mean", count="count").reset_index()
             .sort_values("mean", ascending=False)
         )
         lr.columns = ["Γλώσσα", "Μέση βαθμολογία", "n"]
-        fig = px.bar(
-            lr, x="Γλώσσα", y="Μέση βαθμολογία",
-            text=lr["Μέση βαθμολογία"].round(2),
-            hover_data={"n": True},
-            title="Μέση βαθμολογία ανά γλώσσα",
-        )
+        fig = px.bar(lr, x="Γλώσσα", y="Μέση βαθμολογία",
+                     text=lr["Μέση βαθμολογία"].round(2),
+                     hover_data={"n": True},
+                     title="Μέση βαθμολογία ανά γλώσσα")
         fig.update_traces(textposition="outside")
         fig.update_yaxes(range=[0, 5.5])
         st.plotly_chart(fig, use_container_width=True)
@@ -619,13 +655,10 @@ with tab5:
         st.subheader("📱 Platform ανά γλώσσα (top 5)")
         plat = (
             df[df["lang"].isin(top5_langs)]
-            .groupby(["lang", "publishedPlatform"])
-            .size().reset_index(name="n")
+            .groupby(["lang", "publishedPlatform"]).size().reset_index(name="n")
         )
-        fig = px.bar(
-            plat, x="lang", y="n", color="publishedPlatform",
-            barmode="stack", title="Platform αξιολόγησης ανά γλώσσα",
-        )
+        fig = px.bar(plat, x="lang", y="n", color="publishedPlatform",
+                     barmode="stack", title="Platform αξιολόγησης ανά γλώσσα")
         st.plotly_chart(fig, use_container_width=True)
 
 # ════════════════════════════════════════════════
@@ -780,23 +813,7 @@ with tab7:
         fig.update_traces(textposition="outside")
         st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("🏆 Top 20 χρήστες βάσει συνεισφορών")
-    top_users = (
-        df.groupby("user/name")
-        .agg(
-            κριτικές=("rating", "count"),
-            μέση_βαθμολογία=("rating", "mean"),
-            συνεισφορές=("contributions", "first"),
-        )
-        .sort_values("συνεισφορές", ascending=False)
-        .head(20)
-        .reset_index()
-        .rename(columns={"user/name": "Χρήστης"})
-    )
-    st.dataframe(
-        top_users.style.format({"μέση_βαθμολογία": "{:.2f}", "συνεισφορές": "{:,.0f}"}),
-        use_container_width=True,
-    )
+    # (Ο πίνακας top χρηστών αφαιρέθηκε για λόγους προστασίας προσωπικών δεδομένων)
 
 # ════════════════════════════════════════════════
 # TAB 8 — Χρωματική Ανάλυση
