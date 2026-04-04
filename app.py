@@ -22,7 +22,12 @@ def load_data():
     # Φόρτωση αξιοθέατων
     df_places = pd.read_csv("ThingsToDo.csv", sep=";", encoding="utf-8")
     
-    # Φόρτωση χρωματικών αρχείων (νέα ονόματα)
+    # Μετατροπή συντεταγμένων: αντικατάσταση κόμματος με τελεία και μετατροπή σε float
+    for col in ['placeInfo/latitude', 'placeInfo/longitude']:
+        if col in df_places.columns:
+            df_places[col] = df_places[col].astype(str).str.replace(',', '.').astype(float)
+    
+    # Φόρτωση χρωματικών αρχείων
     df_means = pd.read_csv("color_summary_Means.csv", sep=";", decimal=",", encoding="utf-8")
     df_colors = pd.read_csv("color_summary_Colors.csv", sep=";", decimal=",", encoding="utf-8")
     df_stats = pd.read_csv("color_summary_Statistics.csv", sep=";", decimal=",", encoding="utf-8")
@@ -126,10 +131,16 @@ with tab1:
     
     st.subheader("🗺️ Χάρτης αξιοθέατων")
     if 'placeInfo/latitude' in df_places.columns and 'placeInfo/longitude' in df_places.columns:
-        fig = px.scatter_mapbox(df_places, lat='placeInfo/latitude', lon='placeInfo/longitude',
-                                hover_name='placeInfo/name', zoom=12, height=500)
-        fig.update_layout(mapbox_style="open-street-map")
-        st.plotly_chart(fig, use_container_width=True)
+        df_map = df_places.dropna(subset=['placeInfo/latitude', 'placeInfo/longitude'])
+        if not df_map.empty:
+            fig = px.scatter_mapbox(df_map, lat='placeInfo/latitude', lon='placeInfo/longitude',
+                                    hover_name='placeInfo/name', zoom=12, height=500)
+            fig.update_layout(mapbox_style="open-street-map")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Δεν υπάρχουν έγκυρες συντεταγμένες για εμφάνιση χάρτη.")
+    else:
+        st.info("Οι στήλες συντεταγμένων δεν βρέθηκαν.")
 
 # ------------------------------
 # Tab 2: Δημοφιλία
@@ -240,7 +251,7 @@ with tab7:
     st.metric("Κριτικές με απάντηση", has_response)
 
 # ------------------------------
-# Tab 8: Χρωματική Ανάλυση (ανανεωμένο με βάση νέα αρχεία)
+# Tab 8: Χρωματική Ανάλυση
 # ------------------------------
 with tab8:
     st.subheader("🎨 Χρωματικές παλέτες ανά αξιοθέατο (από color_summary_Colors.csv)")
@@ -249,13 +260,11 @@ with tab8:
     df_color_place = df_colors.merge(df_info, on='#', how='inner')
     df_color_place = df_color_place.merge(df_reviews[['id', 'placeInfo/name_y']], on='id', how='inner')
     
-    # Για κάθε αξιοθέατο, συλλέγουμε όλα τα χρώματα (HEX) και τα ποσοστά (%)
     color_data = []
     for _, row in df_color_place.iterrows():
         place = row['placeInfo/name_y']
         if pd.isna(place):
             continue
-        # Στα color_summary_Colors.csv υπάρχουν στήλες 'HEX' και '%'
         if pd.notna(row['HEX']) and pd.notna(row['%']):
             color_data.append({
                 'place': place,
@@ -265,7 +274,6 @@ with tab8:
     
     if color_data:
         df_colors_agg = pd.DataFrame(color_data)
-        # Για κάθε αξιοθέατο, παίρνουμε τα top 5 χρώματα βάσει ποσοστού
         top_colors = df_colors_agg.groupby('place').apply(lambda g: g.nlargest(5, 'pct')).reset_index(drop=True)
         
         for place in top_colors['place'].unique():
@@ -278,7 +286,6 @@ with tab8:
         st.info("Δεν βρέθηκαν χρωματικά δεδομένα για τα επιλεγμένα αξιοθέατα.")
     
     st.subheader("📊 Διασπορά κορεσμού (S%) και φωτεινότητας (V%)")
-    # Χρησιμοποιούμε τα statistics που ήδη έχουμε
     if 'S%_mean' in df_stats.columns and 'V%_mean' in df_stats.columns:
         stats_merged = df_stats.merge(df_info, on='#').merge(df_reviews[['id', 'placeInfo/name_y']], on='id', how='inner')
         fig = px.scatter(stats_merged, x='S%_mean', y='V%_mean', color='placeInfo/name_y',
