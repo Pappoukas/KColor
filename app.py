@@ -84,6 +84,10 @@ def load_data():
             .replace("nan", np.nan).astype(float)
         )
 
+    # Αν το TripAdvisor CSV έχει ήδη placeInfo/name, αφαιρούμε πριν το merge
+    if "placeInfo/name" in rev.columns:
+        rev = rev.drop(columns=["placeInfo/name"])
+
     # Συγχώνευση για ονόματα / συντεταγμένες
     rev = rev.merge(
         places[["placeInfo/id", "placeInfo/name",
