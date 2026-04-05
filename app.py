@@ -53,8 +53,16 @@ CAT_COLORS = {
     "🏛️ Πολιτιστικό": "#c0392b",
     "🎯 Δραστηριότητα": "#2980b9",
 }
-MONTH_EL = {
-    1: "Ιαν", 2: "Φεβ", 3: "Μαρ", 4: "Απρ", 5: "Μάι", 6: "Ιουν",
+LANG_NAMES = {
+    "el": "Ελληνικά", "en": "Αγγλικά", "it": "Ιταλικά", "fr": "Γαλλικά",
+    "de": "Γερμανικά", "es": "Ισπανικά", "hu": "Ουγγρικά", "da": "Δανικά",
+    "nl": "Ολλανδικά", "pl": "Πολωνικά", "iw": "Εβραϊκά", "he": "Εβραϊκά",
+    "ja": "Ιαπωνικά", "pt": "Πορτογαλικά", "ru": "Ρωσικά", "sr": "Σερβικά",
+    "ro": "Ρουμανικά", "cs": "Τσεχικά", "sk": "Σλοβακικά", "sv": "Σουηδικά",
+    "no": "Νορβηγικά", "fi": "Φινλανδικά", "tr": "Τουρκικά", "ar": "Αραβικά",
+    "zh": "Κινεζικά", "ko": "Κορεατικά", "bg": "Βουλγαρικά", "hr": "Κροατικά",
+}
+MONTH_EL = { 2: "Φεβ", 3: "Μαρ", 4: "Απρ", 5: "Μάι", 6: "Ιουν",
     7: "Ιουλ", 8: "Αυγ", 9: "Σεπ", 10: "Οκτ", 11: "Νοε", 12: "Δεκ",
 }
 SEASON_MAP = {
@@ -95,6 +103,8 @@ def load_data():
         on="placeInfo/id", how="left",
     )
     rev["place_name"] = rev["placeInfo/name"].fillna("Άγνωστο")
+    # Αφαίρεση κριτικών χωρίς αντιστοίχιση αξιοθέατου
+    rev = rev[rev["place_name"] != "Άγνωστο"].copy()
 
     # Παραγόμενες στήλες
     rev["Category"] = rev["place_name"].map(CATEGORY_MAP).fillna("🏛️ Πολιτιστικό")
@@ -105,6 +115,7 @@ def load_data():
     rev["month"] = rev["publishedDate"].dt.month
     rev["month_name"] = rev["month"].map(MONTH_EL)
     rev["season"] = rev["month"].map(SEASON_MAP)
+    rev["lang_name"] = rev["lang"].map(LANG_NAMES).fillna(rev["lang"])  # fallback to code
     rev["text_len"] = rev["text"].astype(str).str.len()
     rev["has_response"] = rev["ownerResponse/text"].notna().astype(int)
     rev["travelDate_dt"] = pd.to_datetime(rev["travelDate"], format="%Y-%m", errors="coerce")
@@ -202,7 +213,7 @@ sel_years = st.sidebar.slider("Εύρος ετών", yr_min, yr_max, (yr_min, yr
 all_cats = sorted(rev["Category"].dropna().unique())
 sel_cats = st.sidebar.multiselect("Κατηγορίες", options=all_cats, default=all_cats)
 
-all_langs = sorted(rev["lang"].dropna().unique())
+all_langs = sorted(rev["lang_name"].dropna().unique())
 sel_langs = st.sidebar.multiselect("Γλώσσες", options=all_langs, default=all_langs)
 
 
@@ -214,7 +225,7 @@ def apply_filters(df):
         df["place_name"].isin(p)
         & df["year"].between(sel_years[0], sel_years[1])
         & df["Category"].isin(c)
-        & df["lang"].isin(l)
+        & df["lang_name"].isin(l)
     ].copy()
 
 
@@ -267,7 +278,7 @@ with tab1:
     c3.metric("Ποσοστό 5★", f"{100*(df['rating']==5).mean():.1f}%")
     c4.metric("Helpful votes", f"{df['helpfulVotes'].sum():,}")
     c5.metric("Αξιοθέατα", df["place_name"].nunique())
-    c6.metric("Γλώσσες", df["lang"].nunique())
+    c6.metric("Γλώσσες", df["lang_name"].nunique())
 
     st.markdown("---")
     col_l, col_r = st.columns(2)
@@ -534,7 +545,7 @@ with tab4:
 
     st.subheader("🎭 Sentiment Analysis (TextBlob — αγγλικές κριτικές)")
     with st.spinner("Υπολογισμός sentiment…"):
-        en_df = df[df["lang"] == "en"].copy()
+        en_df = df[df["lang"] == "en"].copy()  # lang code (not lang_name)
         if not en_df.empty:
             en_df["sentiment"] = en_df["text"].apply(sentiment_score)
             col_l, col_r = st.columns(2)
@@ -563,13 +574,13 @@ with tab4:
 # TAB 5 — Γλώσσα & Προέλευση
 # ════════════════════════════════════════════════
 with tab5:
-    top5_langs = df["lang"].value_counts().head(5).index.tolist()
-    top10_langs = df["lang"].value_counts().head(10).index.tolist()
+    top5_langs = df["lang_name"].value_counts().head(5).index.tolist()
+    top10_langs = df["lang_name"].value_counts().head(10).index.tolist()
 
     col_l, col_r = st.columns(2)
     with col_l:
         st.subheader("🌐 Top 5 γλώσσες κριτικών")
-        lc = df["lang"].value_counts().head(5).reset_index()
+        lc = df["lang_name"].value_counts().head(5).reset_index()
         lc.columns = ["Γλώσσα", "Κριτικές"]
         fig = px.pie(lc, values="Κριτικές", names="Γλώσσα",
                      title="Γλώσσες κριτικών (top 5)")
@@ -577,7 +588,7 @@ with tab5:
 
     with col_r:
         st.subheader("📊 Κατανομή όλων των γλωσσών")
-        lc_all = df["lang"].value_counts().reset_index()
+        lc_all = df["lang_name"].value_counts().reset_index()
         lc_all.columns = ["Γλώσσα", "Κριτικές"]
         fig = px.bar(lc_all, x="Γλώσσα", y="Κριτικές",
                      title="Κριτικές ανά γλώσσα (σύνολο)",
@@ -588,9 +599,9 @@ with tab5:
     loc_col = "user/userLocation/name"
     if loc_col in df.columns:
         locs = df[loc_col].dropna()
-        # Διαχωρισμός Ελλάδα / εξωτερικό βάσει ", Greece" στο string
-        greece_locs = locs[locs.str.contains(", Greece|, Ελλάδα", case=False, na=False)]
-        intl_locs   = locs[~locs.str.contains(", Greece|, Ελλάδα", case=False, na=False)]
+        # Διαχωρισμός Ελλάδα / εξωτερικό — εξαιρούμε ό,τι περιέχει "Greece" ή "Ελλάδα"
+        greece_locs = locs[locs.str.contains("Greece|Ελλάδα", case=False, na=False)]
+        intl_locs   = locs[~locs.str.contains("Greece|Ελλάδα", case=False, na=False)]
 
         col_l, col_r = st.columns(2)
         with col_l:
@@ -615,8 +626,8 @@ with tab5:
 
     st.subheader("🔥 Heatmap: αξιοθέατο × γλώσσα (top 10 γλώσσες)")
     cross = pd.crosstab(
-        df[df["lang"].isin(top10_langs)]["place_name"],
-        df[df["lang"].isin(top10_langs)]["lang"],
+        df[df["lang_name"].isin(top10_langs)]["place_name"],
+        df[df["lang_name"].isin(top10_langs)]["lang_name"],
     )
     fig = px.imshow(cross, text_auto=True, aspect="auto",
                     color_continuous_scale="Blues",
@@ -627,18 +638,18 @@ with tab5:
     with col_l:
         st.subheader("📈 Εξέλιξη top 5 γλωσσών ανά έτος")
         lang_yr = (
-            df[df["lang"].isin(top5_langs)]
-            .groupby(["year", "lang"]).size().reset_index(name="Κριτικές")
+            df[df["lang_name"].isin(top5_langs)]
+            .groupby(["year", "lang_name"]).size().reset_index(name="Κριτικές")
         )
-        fig = px.line(lang_yr, x="year", y="Κριτικές", color="lang",
+        fig = px.line(lang_yr, x="year", y="Κριτικές", color="lang_name",
                       markers=True, title="Εξέλιξη γλωσσών ανά έτος")
         st.plotly_chart(fig, use_container_width=True)
 
     with col_r:
         st.subheader("⭐ Βαθμολογία ανά γλώσσα (top 10)")
         lr = (
-            df[df["lang"].isin(top10_langs)]
-            .groupby("lang")["rating"]
+            df[df["lang_name"].isin(top10_langs)]
+            .groupby("lang_name")["rating"]
             .agg(mean="mean", count="count").reset_index()
             .sort_values("mean", ascending=False)
         )
@@ -654,10 +665,10 @@ with tab5:
     if "publishedPlatform" in df.columns:
         st.subheader("📱 Platform ανά γλώσσα (top 5)")
         plat = (
-            df[df["lang"].isin(top5_langs)]
-            .groupby(["lang", "publishedPlatform"]).size().reset_index(name="n")
+            df[df["lang_name"].isin(top5_langs)]
+            .groupby(["lang_name", "publishedPlatform"]).size().reset_index(name="n")
         )
-        fig = px.bar(plat, x="lang", y="n", color="publishedPlatform",
+        fig = px.bar(plat, x="lang_name", y="n", color="publishedPlatform",
                      barmode="stack", title="Platform αξιολόγησης ανά γλώσσα")
         st.plotly_chart(fig, use_container_width=True)
 
