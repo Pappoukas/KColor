@@ -332,15 +332,29 @@ with tab1:
     )
     map_data["Κατηγορία"] = map_data["place_name"].map(CATEGORY_MAP).fillna("🏛️ Πολιτιστικό")
     if not map_data.empty:
-        fig = px.scatter_mapbox(
-            map_data, lat="lat", lon="lon",
+        fig = px.scatter_map(
+            map_data,
+            lat="lat",
+            lon="lon",
             hover_name="place_name",
-            size="count", color="Κατηγορία",
+            size="count",
+            color="Κατηγορία",
             color_discrete_map=CAT_COLORS,
-            hover_data={"rating": ":.2f", "count": True, "lat": False, "lon": False},
-            zoom=12, height=500, size_max=40,
+                hover_data={
+                "rating": ":.2f",
+                "count": True,
+                "lat": False,
+                "lon": False
+            },
+            zoom=12,
+            height=500,
+            size_max=40,
+            map_style="open-street-map",
         )
-        fig.update_layout(mapbox_style="open-street-map", legend_title="")
+
+        fig.update_layout(
+            legend_title=""
+        )
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Δεν υπάρχουν έγκυρες συντεταγμένες για εμφάνιση χάρτη.")
