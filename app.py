@@ -1047,15 +1047,31 @@ with tab9:
             size="count",
             color="Κατηγορία",
             color_discrete_map=CAT_COLORS,
-            text="place_name",
-            hover_data={"count": True, "mean": ":.2f", "Τεταρτημόριο": True},
-            labels={"count": "Αριθμός κριτικών", "mean": "Μέση βαθμολογία"},
+            hover_name="place_name",
+            hover_data={
+                "count": ":,",
+                "mean": ":.2f",
+                "Κατηγορία": True,
+                "Τεταρτημόριο": True,
+            },
+            labels={
+                "count": "Αριθμός κριτικών",
+                "mean": "Μέση βαθμολογία",
+                "Κατηγορία": "Κατηγορία",
+                "Τεταρτημόριο": "Κατάταξη",
+            },
+            log_x=True,
             height=560,
+            size_max=42,
         )
         fig.add_vline(x=median_reviews, line_dash="dash", line_color="gray")
         fig.add_hline(y=median_rating, line_dash="dash", line_color="gray")
-        fig.update_traces(textposition="top center", marker=dict(opacity=0.78))
-        fig.update_yaxes(range=[3.5, 5.15])
+        fig.update_traces(marker=dict(opacity=0.78))
+        fig.update_yaxes(range=[max(1, float(matrix["mean"].min()) - 0.15), 5.1])
+        fig.update_xaxes(
+            title="Αριθμός κριτικών (λογαριθμική κλίμακα)",
+            rangemode="tozero",
+        )
         fig.update_layout(
             title=f"Popularity × Satisfaction — διάμεσος: {median_reviews:.0f} κριτικές / {median_rating:.2f}★",
             legend_title="Κατηγορία",
