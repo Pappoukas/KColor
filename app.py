@@ -20,10 +20,6 @@ st.set_page_config(
 )
 
 st.title("🏛️ Kastoria Tourism Visual Analytics Dashboard")
-st.markdown(
-    "Ανάλυση **2.578 κριτικών TripAdvisor** & **χρωματικών δεδομένων** από 1.604 φωτογραφίες "
-    "επισκεπτών σε 18 αξιοθέατα της Καστοριάς."
-)
 
 # ──────────────────────────────────────────────
 # Κατηγορίες & σταθερά δεδομένα
@@ -192,6 +188,12 @@ try:
         f"**{len(info):,}** φωτογραφίες · "
         f"**{rev['place_name'].nunique()}** αξιοθέατα"
     )
+
+st.markdown(
+    f"Ανάλυση **{len(rev):,} κριτικών TripAdvisor** & "
+    f"**χρωματικών δεδομένων** από {len(info):,} φωτογραφίες "
+    f"επισκεπτών σε **{rev['place_name'].nunique()} αξιοθέατα** της Καστοριάς."
+)
 except Exception as e:
     st.error(f"❌ Σφάλμα φόρτωσης δεδομένων: {e}")
     st.stop()
@@ -957,6 +959,61 @@ with tab8:
 # TAB 9 — Συγκριτικές & Insights
 # ════════════════════════════════════════════════
 with tab9:
+    st.subheader("🔎 Research Insights")
+    
+    insight_cols = st.columns(3)
+    
+    place_counts = df["place_name"].value_counts()
+    top_place = place_counts.index[0]
+    top_place_n = int(place_counts.iloc[0])
+    
+    place_ratings = (
+        df.groupby("place_name")["rating"]
+        .agg(mean="mean", count="count")
+        .reset_index()
+    )
+    reliable_ratings = place_ratings[place_ratings["count"] >= 20]
+    
+    if not reliable_ratings.empty:
+        best_row = reliable_ratings.loc[reliable_ratings["mean"].idxmax()]
+        best_place = best_row["place_name"]
+        best_rating = float(best_row["mean"])
+        best_n = int(best_row["count"])
+    else:
+        best_place = "—"
+        best_rating = float("nan")
+        best_n = 0
+    
+    response_rate = float(df["has_response"].mean() * 100)
+    
+    insight_cols[0].metric(
+        "📊 Δημοφιλέστερο αξιοθέατο",
+        top_place,
+        f"{top_place_n:,} κριτικές",
+    )
+    insight_cols[1].metric(
+        "⭐ Υψηλότερη μέση βαθμολογία",
+        f"{best_rating:.2f} ⭐" if best_n else "—",
+        f"{best_place} · n={best_n}" if best_n else "Δεν υπάρχουν αρκετά δεδομένα",
+    )
+    insight_cols[2].metric(
+        "💬 Απαντήσεις διαχειριστών",
+        f"{response_rate:.1f}%",
+        "του επιλεγμένου δείγματος",
+    )
+    
+    st.info(
+        f"**Κύριο εύρημα:** Το **{top_place}** συγκεντρώνει τις περισσότερες κριτικές "
+        f"στο επιλεγμένο δείγμα ({top_place_n:,}). "
+        + (
+            f"Με ελάχιστο όριο 20 κριτικών, το **{best_place}** έχει την υψηλότερη "
+            f"μέση βαθμολογία ({best_rating:.2f}/5, n={best_n})."
+            if best_n else
+            "Δεν υπάρχουν αρκετές κριτικές ανά αξιοθέατο για αξιόπιστη σύγκριση βαθμολογιών."
+        )
+    )
+    
+    st.markdown("---")
     st.subheader("🏛️ Σύγκριση κατηγοριών: Φυσικό / Πολιτιστικό / Δραστηριότητα")
     cat_agg = (
         df.groupby("Category")
