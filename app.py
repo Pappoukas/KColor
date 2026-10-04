@@ -987,12 +987,10 @@ with tab9:
 
     response_rate = float(df["has_response"].mean() * 100)
 
-    # Κυρίαρχη γλώσσα
     lang_counts = df["lang_name"].value_counts()
     top_lang = lang_counts.index[0] if not lang_counts.empty else "—"
     top_lang_n = int(lang_counts.iloc[0]) if not lang_counts.empty else 0
 
-    # Φωτογραφική αλληλεπίδραση: μέσες φωτογραφίες ανά κριτική
     photo_by_place = (
         df.groupby("place_name")["Photocount"]
         .mean()
@@ -1003,26 +1001,92 @@ with tab9:
     photo_mean = float(photo_by_place.iloc[0]) if not photo_by_place.empty else 0
 
     insight_cols = st.columns(4)
-    insight_cols[0].metric(
-        "📊 Δημοφιλέστερο αξιοθέατο",
-        top_place,
-        f"{top_place_n:,} κριτικές",
-    )
+    insight_cols[0].metric("📊 Δημοφιλέστερο αξιοθέατο", top_place, f"{top_place_n:,} κριτικές")
     insight_cols[1].metric(
         "⭐ Υψηλότερη βαθμολογία",
         f"{best_rating:.2f} ⭐" if best_n else "—",
         f"{best_place} · n={best_n}" if best_n else "Ελάχιστο δείγμα: n=20",
     )
-    insight_cols[2].metric(
-        "🌍 Κυρίαρχη γλώσσα",
-        top_lang,
-        f"{top_lang_n:,} κριτικές",
-    )
+    insight_cols[2].metric("🌍 Κυρίαρχη γλώσσα", top_lang, f"{top_lang_n:,} κριτικές")
     insight_cols[3].metric(
         "📸 Φωτογραφική αλληλεπίδραση",
         f"{photo_mean:.2f}",
         f"φωτ./κριτική · {photo_place}",
     )
+
+    # ── Popularity × Satisfaction matrix ────────
+    st.markdown("---")
+    st.subheader("🎯 Popularity × Satisfaction")
+    st.caption(
+        "Η θέση κάθε αξιοθέατου συνδυάζει όγκο κριτικών και μέση βαθμολογία. "
+        "Οι διαχωριστικές γραμμές είναι οι διάμεσοι του επιλεγμένου δείγματος."
+    )
+
+    matrix = place_ratings.copy()
+    matrix["Κατηγορία"] = matrix["place_name"].map(CATEGORY_MAP).fillna("🏛️ Πολιτιστικό")
+
+    if len(matrix) >= 2:
+        median_reviews = float(matrix["count"].median())
+        median_rating = float(matrix["mean"].median())
+
+        def quadrant(row):
+            if row["count"] >= median_reviews and row["mean"] >= median_rating:
+                return "⭐ Leaders"
+            if row["count"] >= median_reviews and row["mean"] < median_rating:
+                return "⚠️ Popular but lower-rated"
+            if row["count"] < median_reviews and row["mean"] >= median_rating:
+                return "💎 Hidden gems"
+            return "🔎 Needs attention"
+
+        matrix["Τεταρτημόριο"] = matrix.apply(quadrant, axis=1)
+
+        fig = px.scatter(
+            matrix,
+            x="count",
+            y="mean",
+            size="count",
+            color="Κατηγορία",
+            color_discrete_map=CAT_COLORS,
+            text="place_name",
+            hover_data={"count": True, "mean": ":.2f", "Τεταρτημόριο": True},
+            labels={"count": "Αριθμός κριτικών", "mean": "Μέση βαθμολογία"},
+            height=560,
+        )
+        fig.add_vline(x=median_reviews, line_dash="dash", line_color="gray")
+        fig.add_hline(y=median_rating, line_dash="dash", line_color="gray")
+        fig.update_traces(textposition="top center", marker=dict(opacity=0.78))
+        fig.update_yaxes(range=[3.5, 5.15])
+        fig.update_layout(
+            title=f"Popularity × Satisfaction — διάμεσος: {median_reviews:.0f} κριτικές / {median_rating:.2f}★",
+            legend_title="Κατηγορία",
+            margin=dict(l=20, r=20, t=70, b=20),
+        )
+        st.plotly_chart(fig, width="stretch")
+
+        q_counts = matrix["Τεταρτημόριο"].value_counts()
+        q1 = matrix[matrix["Τεταρτημόριο"] == "⭐ Leaders"]
+        q2 = matrix[matrix["Τεταρτημόριο"] == "⚠️ Popular but lower-rated"]
+        q3 = matrix[matrix["Τεταρτημόριο"] == "💎 Hidden gems"]
+
+        matrix_text = []
+        if not q1.empty:
+            matrix_text.append(f"**⭐ Leaders:** {', '.join(q1.sort_values('count', ascending=False)['place_name'].head(3))}.")
+        if not q2.empty:
+            matrix_text.append(f"**⚠️ Popular but lower-rated:** {', '.join(q2.sort_values('count', ascending=False)['place_name'].head(3))}.")
+        if not q3.empty:
+            matrix_text.append(f"**💎 Hidden gems:** {', '.join(q3.sort_values('mean', ascending=False)['place_name'].head(3))}.")
+        if not matrix_text:
+            matrix_text.append("Δεν υπάρχουν αρκετές διαφοροποιήσεις για ουσιαστική κατάταξη.")
+
+        st.info(
+            "**Ερευνητική ανάγνωση:**\n\n"
+            + "\n".join(f"• {item}" for item in matrix_text)
+            + "\n\n"
+            "Η ταξινόμηση είναι σχετική με το συγκεκριμένο δείγμα και δεν αποτελεί "
+            "απόλυτη αξιολόγηση των αξιοθέτων."
+        )
+    else:
+        st.info("Δεν υπάρχουν αρκετά αξιοθέατα για τη δημιουργία του matrix.")
 
     # ── Χρονική τάση ────────────────────────────
     yearly_counts = (
@@ -1041,12 +1105,15 @@ with tab9:
             change_pct = (last["Κριτικές"] - first["Κριτικές"]) / first["Κριτικές"] * 100
             direction = "αύξηση" if change_pct >= 0 else "μείωση"
             trend_text = (
-                f"Από το {int(first['year'])} έως το {int(last['year'])}, "
-                f"ο όγκος κριτικών παρουσιάζει **{direction} {abs(change_pct):.1f}%** "
-                f"({int(first['Κριτικές']):,} → {int(last['Κριτικές']):,})."
+                f"Ο αριθμός των **διαθέσιμων κριτικών στο dataset** από το "
+                f"{int(first['year'])} έως το {int(last['year'])} παρουσιάζει "
+                f"**{direction} {abs(change_pct):.1f}%** "
+                f"({int(first['Κριτικές']):,} → {int(last['Κριτικές']):,}). "
+                "Η μεταβολή αυτή δεν πρέπει να ερμηνεύεται ως αντίστοιχη μεταβολή "
+                "της τουριστικής ζήτησης."
             )
 
-    # ── Χρωματικό insight ────────────────────────
+    # ── Χρωματικό insight με όριο ουσιαστικότητας ──
     strongest_color = None
     strongest_r = np.nan
     if not means_joined.empty and num_cols:
@@ -1057,20 +1124,27 @@ with tab9:
                 r = sub["rating"].corr(sub[col])
                 if pd.notna(r):
                     color_corr_tmp.append((col, float(r)))
+
         if color_corr_tmp:
             strongest_color, strongest_r = max(color_corr_tmp, key=lambda x: abs(x[1]))
 
-    if strongest_color:
+    if strongest_color and abs(strongest_r) >= 0.30:
         color_direction = "θετική" if strongest_r > 0 else "αρνητική"
         color_text = (
-            f"Το χαρακτηριστικό **{strongest_color}** εμφανίζει τη ισχυρότερη "
+            f"Το **{strongest_color}** εμφανίζει την ισχυρότερη αξιοσημείωτη "
             f"γραμμική συσχέτιση με τη βαθμολογία (**r={strongest_r:+.3f}**, "
             f"{color_direction})."
+        )
+    elif strongest_color:
+        color_text = (
+            f"Δεν εντοπίστηκε ουσιαστική γραμμική συσχέτιση μεταξύ των εξεταζόμενων "
+            f"χρωματικών χαρακτηριστικών και της βαθμολογίας. Η ισχυρότερη από τις "
+            f"παρατηρούμενες σχέσεις ήταν μόλις **r={strongest_r:+.3f}** "
+            f"({strongest_color})."
         )
     else:
         color_text = "Δεν υπάρχουν αρκετά διαθέσιμα χρωματικά δεδομένα για ασφαλές εύρημα."
 
-    # ── Συνοπτική ερμηνεία ──────────────────────
     st.info(
         f"**🔎 Ερμηνεία του επιλεγμένου δείγματος**\n\n"
         f"• Το **{top_place}** είναι το δημοφιλέστερο με **{top_place_n:,} κριτικές**.\n"
@@ -1081,10 +1155,11 @@ with tab9:
         f"• {color_text}"
     )
 
-    # ── Προειδοποίηση ερμηνείας ─────────────────
     st.caption(
         "⚠️ Οι δείκτες εξαρτώνται από τα ενεργά φίλτρα. "
-        "Η Pearson r εκφράζει γραμμική συσχέτιση· δεν αποτελεί απόδειξη αιτιώδους σχέσης."
+        "Η Pearson r εκφράζει γραμμική συσχέτιση· δεν αποτελεί απόδειξη αιτιώδους σχέσης. "
+        "Για την ταξινόμηση Popularity × Satisfaction χρησιμοποιούνται οι διάμεσοι "
+        "του τρέχοντος δείγματος."
     )
 
     st.markdown("---")
