@@ -296,7 +296,7 @@ with tab1:
             color="Κατηγορία", color_discrete_map=CAT_COLORS, height=500,
         )
         fig.update_layout(yaxis={"categoryorder": "total ascending"}, legend_title="")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("⭐ Μέση βαθμολογία ανά αξιοθέατο")
@@ -316,7 +316,7 @@ with tab1:
         )
         fig.update_traces(textposition="outside")
         fig.update_layout(xaxis_range=[0, 5.5], legend_title="")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.subheader("🗺️ Χάρτης αξιοθέατων Καστοριάς")
     map_data = (
@@ -340,22 +340,27 @@ with tab1:
             size="count",
             color="Κατηγορία",
             color_discrete_map=CAT_COLORS,
-                hover_data={
+            hover_data={
                 "rating": ":.2f",
                 "count": True,
                 "lat": False,
-                "lon": False
+                "lon": False,
             },
             zoom=12,
-            height=500,
-            size_max=40,
+            center={
+                "lat": 40.52,
+                "lon": 21.27,
+            },
+            height=520,
+            size_max=42,
             map_style="open-street-map",
         )
 
         fig.update_layout(
-            legend_title=""
+            legend_title="",
+            margin=dict(l=0, r=0, t=10, b=0),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("Δεν υπάρχουν έγκυρες συντεταγμένες για εμφάνιση χάρτη.")
 
@@ -372,7 +377,7 @@ with tab2:
     fig = px.area(monthly, x="Μήνας", y="Κριτικές",
                   title="Αριθμός κριτικών ανά μήνα")
     fig.update_xaxes(tickangle=45)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     col_l, col_r = st.columns(2)
     with col_l:
@@ -387,7 +392,7 @@ with tab2:
             color_continuous_scale="Blues",
             title="Heatmap: κριτικές ανά μήνα & έτος",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("🌸 Κατανομή ανά εποχή")
@@ -398,7 +403,7 @@ with tab2:
             color_discrete_sequence=px.colors.qualitative.Pastel,
             title="Κριτικές ανά εποχή",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.subheader("📈 Ετήσια εξέλιξη ανά αξιοθέατο (top 6)")
     top6 = df["place_name"].value_counts().head(6).index.tolist()
@@ -411,7 +416,7 @@ with tab2:
         yearly, x="year", y="Κριτικές", color="place_name",
         markers=True, title="Ετήσιες κριτικές — top 6 αξιοθέατα",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.subheader("🔵 Bubble chart: κριτικές ανά αξιοθέατο & έτος")
     yr_rank = df.groupby(["year", "place_name"]).size().reset_index(name="Κριτικές")
@@ -422,7 +427,7 @@ with tab2:
         color_discrete_map=CAT_COLORS,
         title="Bubble: κριτικές ανά αξιοθέατο & έτος",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 # ════════════════════════════════════════════════
 # TAB 3 — Βαθμολογίες
@@ -441,7 +446,7 @@ with tab3:
             color_continuous_scale=["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#27ae60"],
         )
         fig.update_traces(textposition="outside")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("📦 Box plot ανά αξιοθέατο")
@@ -451,7 +456,7 @@ with tab3:
             orientation="h", title="Κατανομή βαθμολογιών",
         )
         fig.update_layout(yaxis={"categoryorder": "median ascending"}, legend_title="")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.subheader("📈 Τάση μέσης βαθμολογίας (τριμηνιαία)")
     trend = (
@@ -465,7 +470,7 @@ with tab3:
     )
     fig.update_xaxes(tickangle=45)
     fig.update_yaxes(range=[1, 5])
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     col_l, col_r = st.columns(2)
     with col_l:
@@ -478,7 +483,7 @@ with tab3:
         )
         fig.update_traces(textposition="outside")
         fig.update_yaxes(range=[0, 5.5])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("🗓️ Ποσοστό 5★ ανά μήνα")
@@ -495,7 +500,7 @@ with tab3:
             title="Ποσοστό 5★ ανά μήνα",
         )
         fig.update_traces(textposition="outside")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 # ════════════════════════════════════════════════
 # TAB 4 — Κείμενο & Sentiment
@@ -541,7 +546,7 @@ with tab4:
             color="Category", color_discrete_map=CAT_COLORS,
             title="Μήκος κριτικής σε χαρακτήρες",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("📏 Μέσο μήκος κριτικής ανά αξιοθέατο")
@@ -555,7 +560,7 @@ with tab4:
             title="Μέσο μήκος κειμένου ανά αξιοθέατο",
         )
         fig.update_layout(yaxis={"categoryorder": "total ascending"})
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.subheader("🎭 Sentiment Analysis (TextBlob — αγγλικές κριτικές)")
     with st.spinner("Υπολογισμός sentiment…"):
@@ -570,7 +575,7 @@ with tab4:
                     color_discrete_sequence=["#3498db"],
                     title="Κατανομή sentiment score",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             with col_r:
                 sp = en_df.groupby("place_name")["sentiment"].mean().sort_values().reset_index()
                 sp.columns = ["Αξιοθέατο", "Sentiment"]
@@ -580,7 +585,7 @@ with tab4:
                     title="Μέσο sentiment ανά αξιοθέατο",
                 )
                 fig.update_layout(yaxis={"categoryorder": "total ascending"})
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
         else:
             st.info("Δεν υπάρχουν αγγλικές κριτικές στα τρέχοντα φίλτρα.")
 
@@ -598,7 +603,7 @@ with tab5:
         lc.columns = ["Γλώσσα", "Κριτικές"]
         fig = px.pie(lc, values="Κριτικές", names="Γλώσσα",
                      title="Γλώσσες κριτικών (top 5)")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("📊 Κατανομή όλων των γλωσσών")
@@ -608,7 +613,7 @@ with tab5:
                      title="Κριτικές ανά γλώσσα (σύνολο)",
                      color="Κριτικές", color_continuous_scale="Blues")
         fig.update_xaxes(tickangle=45)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     loc_col = "user/userLocation/name"
     if loc_col in df.columns:
@@ -626,7 +631,7 @@ with tab5:
                          title="Top 10 ελληνικές πόλεις",
                          color="Κριτικές", color_continuous_scale="Greens")
             fig.update_layout(yaxis={"categoryorder": "total ascending"})
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         with col_r:
             st.subheader("🌍 Top 10 πόλεις — Εξωτερικό")
@@ -636,7 +641,7 @@ with tab5:
                          title="Top 10 διεθνείς τοποθεσίες",
                          color="Κριτικές", color_continuous_scale="Oranges")
             fig.update_layout(yaxis={"categoryorder": "total ascending"})
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
     st.subheader("🔥 Heatmap: αξιοθέατο × γλώσσα (top 10 γλώσσες)")
     cross = pd.crosstab(
@@ -646,7 +651,7 @@ with tab5:
     fig = px.imshow(cross, text_auto=True, aspect="auto",
                     color_continuous_scale="Blues",
                     title="Κριτικές: αξιοθέατο × γλώσσα")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     col_l, col_r = st.columns(2)
     with col_l:
@@ -657,7 +662,7 @@ with tab5:
         )
         fig = px.line(lang_yr, x="year", y="Κριτικές", color="lang_name",
                       markers=True, title="Εξέλιξη γλωσσών ανά έτος")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("⭐ Βαθμολογία ανά γλώσσα (top 10)")
@@ -674,7 +679,7 @@ with tab5:
                      title="Μέση βαθμολογία ανά γλώσσα")
         fig.update_traces(textposition="outside")
         fig.update_yaxes(range=[0, 5.5])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     if "publishedPlatform" in df.columns:
         st.subheader("📱 Platform ανά γλώσσα (top 5)")
@@ -684,7 +689,7 @@ with tab5:
         )
         fig = px.bar(plat, x="lang_name", y="n", color="publishedPlatform",
                      barmode="stack", title="Platform αξιολόγησης ανά γλώσσα")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 # ════════════════════════════════════════════════
 # TAB 6 — Τύπος Ταξιδιού
@@ -700,7 +705,7 @@ with tab6:
             color_discrete_sequence=px.colors.qualitative.Safe,
             title="Τύπος ταξιδιού — σύνολο",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("⭐ Βαθμολογία ανά τύπο ταξιδιού")
@@ -719,7 +724,7 @@ with tab6:
         )
         fig.update_traces(textposition="outside")
         fig.update_yaxes(range=[0, 5.5])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.subheader("📊 Τύπος ταξιδιού ανά αξιοθέατο (stacked bar)")
     ta = df.groupby(["place_name", "tripType"]).size().reset_index(name="n")
@@ -728,7 +733,7 @@ with tab6:
         barmode="stack", title="Τύπος ταξιδιού ανά αξιοθέατο",
     )
     fig.update_xaxes(tickangle=35)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     col_l, col_r = st.columns(2)
     with col_l:
@@ -738,7 +743,7 @@ with tab6:
             ty, x="year", y="n", color="tripType",
             markers=True, title="Τύποι ταξιδιού ανά έτος",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("📏 Μέσο μήκος κριτικής ανά τύπο ταξιδιού")
@@ -748,7 +753,7 @@ with tab6:
             tl2, x="Τύπος", y="Μέσο μήκος",
             color="Τύπος", title="Μήκος κειμένου ανά τύπο",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 # ════════════════════════════════════════════════
 # TAB 7 — Αλληλεπίδραση
@@ -770,7 +775,7 @@ with tab7:
         )
         fig.update_xaxes(tickangle=35)
         fig.update_layout(legend_title="")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("💬 Ποσοστό απαντήσεων ανά αξιοθέατο")
@@ -786,7 +791,7 @@ with tab7:
             title="Ποσοστό κριτικών με απάντηση διαχειριστή",
         )
         fig.update_layout(yaxis={"categoryorder": "total ascending"})
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     col_l, col_r = st.columns(2)
     with col_l:
@@ -804,7 +809,7 @@ with tab7:
                 x=lag.median(), line_dash="dash", line_color="red",
                 annotation_text=f"Διάμεσος: {lag.median():.0f}d",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("Δεν υπάρχουν έγκυρα δεδομένα lag.")
 
@@ -824,7 +829,7 @@ with tab7:
             cl, x="Επίπεδο", y="Κριτικές",
             color="Επίπεδο", title="Κριτικές ανά επίπεδο χρήστη",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     if "publishedPlatform" in df.columns:
         st.subheader("📱 Κατανομή πλατφόρμας δημοσίευσης")
@@ -836,7 +841,7 @@ with tab7:
             title="Κριτικές ανά πλατφόρμα",
         )
         fig.update_traces(textposition="outside")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     # (Ο πίνακας top χρηστών αφαιρέθηκε για λόγους προστασίας προσωπικών δεδομένων)
 
@@ -901,7 +906,7 @@ with tab8:
                 title="S% vs V% ανά φωτογραφία",
                 labels={s_col: "Κορεσμός (%)", v_col: "Φωτεινότητα (%)"},
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("Δεν βρέθηκαν στήλες S%/V%.")
 
@@ -916,7 +921,7 @@ with tab8:
                 title="Lightness vs Chroma (LCH)",
                 labels={l_col: "Lightness", c_col: "Chroma"},
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("Δεν βρέθηκαν στήλες L/C.")
 
@@ -931,7 +936,7 @@ with tab8:
             title=f"Μέση τιμή {metric_sel} ανά αξιοθέατο",
         )
         fig.update_layout(yaxis={"categoryorder": "total ascending"})
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     if "megapixels" in info.columns:
         st.subheader("📐 Ανάλυση φωτογραφιών (megapixels) ανά αξιοθέατο")
@@ -946,7 +951,7 @@ with tab8:
                 title="Megapixels φωτογραφιών ανά αξιοθέατο",
             )
             fig.update_xaxes(tickangle=35)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
 # ════════════════════════════════════════════════
 # TAB 9 — Συγκριτικές & Insights
@@ -974,7 +979,7 @@ with tab9:
         )
         fig.update_traces(textposition="outside")
         fig.update_yaxes(range=[0, 5.5])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_r:
         fig = px.scatter(
@@ -983,7 +988,7 @@ with tab9:
             color_discrete_map=CAT_COLORS, text="Category",
             title="Bubble: κριτικές vs βαθμολογία vs φωτογραφίες",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.markdown("---")
     col_l, col_r = st.columns(2)
@@ -1011,7 +1016,7 @@ with tab9:
                 title=f"Τάση βαθμολογίας ({slope_dir}: {z[0]:+.4f}/έτος)",
                 yaxis_range=[1, 5],
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
     with col_r:
         st.subheader("💬 Επίδραση απάντησης διαχειριστή στη βαθμολογία")
@@ -1032,7 +1037,7 @@ with tab9:
             line=dict(dash="dash", color="grey"),
         )
         fig.update_traces(textposition="top center")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.subheader("📊 Πίνακας συσχέτισης Pearson")
     corr_cols = ["rating", "Photocount", "helpfulVotes", "text_len",
@@ -1046,7 +1051,7 @@ with tab9:
             color_continuous_scale="RdBu_r", zmin=-1, zmax=1,
             title="Pearson r μεταξύ βασικών μεταβλητών",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.subheader("🎨 Συσχέτιση χρωματικών χαρακτηριστικών με βαθμολογία")
     if not means_joined.empty and num_cols:
@@ -1065,6 +1070,6 @@ with tab9:
                 title="Συσχέτιση χρωμάτων με βαθμολογία",
             )
             fig.add_vline(x=0, line_color="black")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
     else:
         st.info("Δεν υπάρχουν διαθέσιμα χρωματικά δεδομένα για τα επιλεγμένα φίλτρα.")
