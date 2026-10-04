@@ -960,59 +960,133 @@ with tab8:
 # ════════════════════════════════════════════════
 with tab9:
     st.subheader("🔎 Research Insights")
-    
-    insight_cols = st.columns(3)
-    
+    st.caption(
+        "Τα ευρήματα υπολογίζονται δυναμικά από τα επιλεγμένα φίλτρα. "
+        "Οι συσχετίσεις δείχνουν σχέσεις μεταξύ μεταβλητών και δεν τεκμηριώνουν αιτιότητα."
+    )
+
+    # ── Βασικοί δείκτες ─────────────────────────
     place_counts = df["place_name"].value_counts()
     top_place = place_counts.index[0]
     top_place_n = int(place_counts.iloc[0])
-    
+
     place_ratings = (
         df.groupby("place_name")["rating"]
         .agg(mean="mean", count="count")
         .reset_index()
     )
     reliable_ratings = place_ratings[place_ratings["count"] >= 20]
-    
+
     if not reliable_ratings.empty:
         best_row = reliable_ratings.loc[reliable_ratings["mean"].idxmax()]
         best_place = best_row["place_name"]
         best_rating = float(best_row["mean"])
         best_n = int(best_row["count"])
     else:
-        best_place = "—"
-        best_rating = float("nan")
-        best_n = 0
-    
+        best_place, best_rating, best_n = "—", float("nan"), 0
+
     response_rate = float(df["has_response"].mean() * 100)
-    
+
+    # Κυρίαρχη γλώσσα
+    lang_counts = df["lang_name"].value_counts()
+    top_lang = lang_counts.index[0] if not lang_counts.empty else "—"
+    top_lang_n = int(lang_counts.iloc[0]) if not lang_counts.empty else 0
+
+    # Φωτογραφική αλληλεπίδραση: μέσες φωτογραφίες ανά κριτική
+    photo_by_place = (
+        df.groupby("place_name")["Photocount"]
+        .mean()
+        .dropna()
+        .sort_values(ascending=False)
+    )
+    photo_place = photo_by_place.index[0] if not photo_by_place.empty else "—"
+    photo_mean = float(photo_by_place.iloc[0]) if not photo_by_place.empty else 0
+
+    insight_cols = st.columns(4)
     insight_cols[0].metric(
         "📊 Δημοφιλέστερο αξιοθέατο",
         top_place,
         f"{top_place_n:,} κριτικές",
     )
     insight_cols[1].metric(
-        "⭐ Υψηλότερη μέση βαθμολογία",
+        "⭐ Υψηλότερη βαθμολογία",
         f"{best_rating:.2f} ⭐" if best_n else "—",
-        f"{best_place} · n={best_n}" if best_n else "Δεν υπάρχουν αρκετά δεδομένα",
+        f"{best_place} · n={best_n}" if best_n else "Ελάχιστο δείγμα: n=20",
     )
     insight_cols[2].metric(
-        "💬 Απαντήσεις διαχειριστών",
-        f"{response_rate:.1f}%",
-        "του επιλεγμένου δείγματος",
+        "🌍 Κυρίαρχη γλώσσα",
+        top_lang,
+        f"{top_lang_n:,} κριτικές",
     )
-    
-    st.info(
-        f"**Κύριο εύρημα:** Το **{top_place}** συγκεντρώνει τις περισσότερες κριτικές "
-        f"στο επιλεγμένο δείγμα ({top_place_n:,}). "
-        + (
-            f"Με ελάχιστο όριο 20 κριτικών, το **{best_place}** έχει την υψηλότερη "
-            f"μέση βαθμολογία ({best_rating:.2f}/5, n={best_n})."
-            if best_n else
-            "Δεν υπάρχουν αρκετές κριτικές ανά αξιοθέατο για αξιόπιστη σύγκριση βαθμολογιών."
+    insight_cols[3].metric(
+        "📸 Φωτογραφική αλληλεπίδραση",
+        f"{photo_mean:.2f}",
+        f"φωτ./κριτική · {photo_place}",
+    )
+
+    # ── Χρονική τάση ────────────────────────────
+    yearly_counts = (
+        df.dropna(subset=["year"])
+        .groupby("year")
+        .size()
+        .reset_index(name="Κριτικές")
+        .sort_values("year")
+    )
+
+    trend_text = "Δεν υπάρχει επαρκής χρονική σειρά για υπολογισμό τάσης."
+    if len(yearly_counts) >= 2:
+        first = yearly_counts.iloc[0]
+        last = yearly_counts.iloc[-1]
+        if first["Κριτικές"] > 0:
+            change_pct = (last["Κριτικές"] - first["Κριτικές"]) / first["Κριτικές"] * 100
+            direction = "αύξηση" if change_pct >= 0 else "μείωση"
+            trend_text = (
+                f"Από το {int(first['year'])} έως το {int(last['year'])}, "
+                f"ο όγκος κριτικών παρουσιάζει **{direction} {abs(change_pct):.1f}%** "
+                f"({int(first['Κριτικές']):,} → {int(last['Κριτικές']):,})."
+            )
+
+    # ── Χρωματικό insight ────────────────────────
+    strongest_color = None
+    strongest_r = np.nan
+    if not means_joined.empty and num_cols:
+        color_corr_tmp = []
+        for col in num_cols:
+            sub = means_joined[["rating", col]].dropna()
+            if len(sub) > 10:
+                r = sub["rating"].corr(sub[col])
+                if pd.notna(r):
+                    color_corr_tmp.append((col, float(r)))
+        if color_corr_tmp:
+            strongest_color, strongest_r = max(color_corr_tmp, key=lambda x: abs(x[1]))
+
+    if strongest_color:
+        color_direction = "θετική" if strongest_r > 0 else "αρνητική"
+        color_text = (
+            f"Το χαρακτηριστικό **{strongest_color}** εμφανίζει τη ισχυρότερη "
+            f"γραμμική συσχέτιση με τη βαθμολογία (**r={strongest_r:+.3f}**, "
+            f"{color_direction})."
         )
+    else:
+        color_text = "Δεν υπάρχουν αρκετά διαθέσιμα χρωματικά δεδομένα για ασφαλές εύρημα."
+
+    # ── Συνοπτική ερμηνεία ──────────────────────
+    st.info(
+        f"**🔎 Ερμηνεία του επιλεγμένου δείγματος**\n\n"
+        f"• Το **{top_place}** είναι το δημοφιλέστερο με **{top_place_n:,} κριτικές**.\n"
+        f"• Η υψηλότερη μέση βαθμολογία μεταξύ αξιοθέατων με τουλάχιστον 20 κριτικές "
+        f"είναι **{best_rating:.2f}/5** για το **{best_place}**.\n"
+        f"• Η **{top_lang}** είναι η συχνότερη γλώσσα του δείγματος.\n"
+        f"• {trend_text}\n"
+        f"• {color_text}"
     )
-    
+
+    # ── Προειδοποίηση ερμηνείας ─────────────────
+    st.caption(
+        "⚠️ Οι δείκτες εξαρτώνται από τα ενεργά φίλτρα. "
+        "Η Pearson r εκφράζει γραμμική συσχέτιση· δεν αποτελεί απόδειξη αιτιώδους σχέσης."
+    )
+
     st.markdown("---")
     st.subheader("🏛️ Σύγκριση κατηγοριών: Φυσικό / Πολιτιστικό / Δραστηριότητα")
     cat_agg = (
